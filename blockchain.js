@@ -30,8 +30,8 @@ class Blockchain {
 
     // Peer discovery configuration
     this.discoverySeeds = [
-      'https://seed1.ekehi.network',
-      'https://seed2.ekehi.network'
+      'https://ekehi-network.onrender.com',
+      'https://664688a8-8264-45f8-8143-ed7bf94ca882-00-19vgtswsexh1s.worf.replit.dev'
     ];
     this.maxPeers = 20;
     this.discoveryInterval = null;
