@@ -2,6 +2,7 @@ import sha256 from 'sha256';
 import { v4 as uuidv4 } from 'uuid';
 import { Level } from 'level';
 import crypto from 'crypto';
+import { ContractSystem } from './contracts.js';
 
 const currentNodeUrl = process.argv[3];
 
@@ -46,7 +47,7 @@ class Blockchain {
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
     
     // Initialize contract system
-    this.initializeContractSystem();
+    this.contractSystem = new ContractSystem(this);
     
     this.initializeBlockchain();
   }
@@ -802,148 +803,21 @@ class Blockchain {
       console.log('Peer discovery stopped');
     }
 
-  // Smart Contract System
-  initializeContractSystem() {
-    this.contracts = new Map();
-    this.contractStorage = new Map();
-    this.contractEvents = [];
-  }
-
+  // Contract system delegate methods
   createContract(contractCode, creator, initialData = {}) {
-    const contractId = uuidv4().split('-').join('');
-    const contract = {
-      id: contractId,
-      code: contractCode,
-      creator,
-      created: Date.now(),
-      state: 'active',
-      storage: initialData,
-      balance: 0,
-      network: this.networkName
-    };
-
-    this.contracts.set(contractId, contract);
-    this.contractStorage.set(contractId, initialData);
-
-    return contract;
+    return this.contractSystem.createContract(contractCode, creator, initialData);
   }
 
   executeContract(contractId, method, params, caller, value = 0) {
-    const contract = this.contracts.get(contractId);
-    if (!contract || contract.state !== 'active') {
-      throw new Error('Contract not found or inactive');
-    }
-
-    try {
-      // Simple contract execution environment
-      const contractContext = {
-        contractId,
-        caller,
-        value,
-        timestamp: Date.now(),
-        blockNumber: this.chain.length,
-        storage: this.contractStorage.get(contractId) || {},
-        balance: contract.balance,
-        
-        // Contract functions
-        transfer: (to, amount) => {
-          if (contract.balance < amount) {
-            throw new Error('Insufficient contract balance');
-          }
-          
-          const tx = this.createNewTransaction(amount, `CONTRACT:${contractId}`, to);
-          this.addTransactionToPendingTransactions(tx);
-          contract.balance -= amount;
-          return tx.transactionId;
-        },
-        
-        emit: (eventName, data) => {
-          this.contractEvents.push({
-            contract: contractId,
-            event: eventName,
-            data,
-            timestamp: Date.now(),
-            block: this.chain.length
-          });
-        },
-        
-        require: (condition, message) => {
-          if (!condition) {
-            throw new Error(message || 'Contract requirement failed');
-          }
-        }
-      };
-
-      // Execute contract method
-      const result = this.executeContractMethod(contract.code, method, params, contractContext);
-      
-      // Update contract storage
-      this.contractStorage.set(contractId, contractContext.storage);
-      contract.balance = contractContext.balance;
-
-      return {
-        success: true,
-        result,
-        gasUsed: this.calculateGasUsed(method, params),
-        events: this.contractEvents.filter(e => e.contract === contractId)
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  executeContractMethod(contractCode, method, params, context) {
-    // Simple contract method execution
-    // In a real implementation, this would use a proper VM
-    try {
-      const contractFunction = new Function('context', 'method', 'params', `
-        with(context) {
-          ${contractCode}
-          if (typeof ${method} === 'function') {
-            return ${method}(...params);
-          } else {
-            throw new Error('Method not found: ${method}');
-          }
-        }
-      `);
-      
-      return contractFunction(context, method, params);
-    } catch (error) {
-      throw new Error(`Contract execution failed: ${error.message}`);
-    }
-  }
-
-  calculateGasUsed(method, params) {
-    // Simple gas calculation
-    const baseGas = 21000;
-    const methodGas = method.length * 100;
-    const paramsGas = JSON.stringify(params).length * 10;
-    return baseGas + methodGas + paramsGas;
+    return this.contractSystem.executeContract(contractId, method, params, caller, value);
   }
 
   getContract(contractId) {
-    const contract = this.contracts.get(contractId);
-    if (!contract) return null;
-
-    return {
-      ...contract,
-      storage: this.contractStorage.get(contractId),
-      events: this.contractEvents.filter(e => e.contract === contractId)
-    };
+    return this.contractSystem.getContract(contractId);
   }
 
   getContractEvents(contractId, eventName = null) {
-    let events = this.contractEvents.filter(e => e.contract === contractId);
-    if (eventName) {
-      events = events.filter(e => e.event === eventName);
-    }
-    return events;
-  }
-
-
+    return this.contractSystem.getContractEvents(contractId, eventName);
   }
 
   async discoverPeers() {
