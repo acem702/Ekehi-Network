@@ -12,3 +12,19 @@ channel = "stable-24_11"
 run = ["node", "index.js"]
 deploymentTarget = "autoscale"
 ignorePorts = false
+
+[workflows]
+runButton = "Run Blockchain Node"
+
+[[workflows.workflow]]
+name = "Run Blockchain Node"
+author = 23456654
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "node index.js 5000 http://localhost:5000"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
