@@ -941,8 +941,7 @@ app.post("/api/faucet/request", async (req, res) => {
     }
 
     // Check if address already received faucet tokens recently
-    const addressData```text
-= bitcoin.getAddressData(address);
+    const addressData = bitcoin.getAddressData(address);
     const recentFaucetTx = addressData.addressTransactions.find(tx => 
       tx.sender === 'FAUCET' && (Date.now() - tx.timestamp) < 3600000 // 1 hour
     );
