@@ -39,36 +39,38 @@ app.get("/api/explorer/data", (req, res) => {
     const allTransactions = [];
     
     bitcoin.chain.forEach(block => {
-      block.transactions.forEach(tx => {
-        allTransactions.push({
-          ...tx,
-          blockIndex: block.index,
-          blockHash: block.hash,
-          blockTimestamp: block.timestamp
+      if (block.transactions && Array.isArray(block.transactions)) {
+        block.transactions.forEach(tx => {
+          allTransactions.push({
+            ...tx,
+            blockIndex: block.index,
+            blockHash: block.hash || '0',
+            blockTimestamp: block.timestamp
+          });
         });
-      });
+      }
     });
     
     const recentTransactions = allTransactions.slice(-50).reverse();
     
     res.json({
       blocks: recentBlocks.map(block => ({
-        index: block.index,
-        hash: block.hash,
-        timestamp: block.timestamp,
-        transactions: block.transactions.length,
-        difficulty: block.difficulty,
-        nonce: block.nonce,
-        previousBlockHash: block.previousBlockHash
+        index: block.index || 0,
+        hash: block.hash || '0',
+        timestamp: block.timestamp || Date.now(),
+        transactions: (block.transactions && block.transactions.length) || 0,
+        difficulty: block.difficulty || bitcoin.difficulty,
+        nonce: block.nonce || 0,
+        previousBlockHash: block.previousBlockHash || '0'
       })),
       transactions: recentTransactions.map(tx => ({
-        transactionId: tx.transactionId,
-        amount: tx.amount,
-        sender: tx.sender,
-        recipient: tx.recipient,
-        timestamp: tx.timestamp || tx.blockTimestamp,
+        transactionId: tx.transactionId || 'N/A',
+        amount: tx.amount || 0,
+        sender: tx.sender || 'Unknown',
+        recipient: tx.recipient || 'Unknown',
+        timestamp: tx.timestamp || tx.blockTimestamp || Date.now(),
         fee: tx.fee || 0,
-        blockIndex: tx.blockIndex
+        blockIndex: tx.blockIndex || 0
       })),
       stats: bitcoin.getStats(),
       isReady: true
@@ -78,8 +80,13 @@ app.get("/api/explorer/data", (req, res) => {
     res.json({
       blocks: [],
       transactions: [],
-      stats: { totalBlocks: 0, totalTransactions: 0 },
-      isReady: false,
+      stats: { 
+        totalBlocks: bitcoin.chain ? bitcoin.chain.length : 0, 
+        totalTransactions: 0,
+        totalSupply: 0,
+        difficulty: bitcoin.difficulty || 1
+      },
+      isReady: true,
       error: error.message
     });
   }
@@ -568,34 +575,34 @@ app.get("/dashboard", (req, res) => {
 
 app.get("/api/dashboard/data", (req, res) => {
   try {
-    const recentBlocks = bitcoin.chain.slice(-10);
-    const recentTransactions = bitcoin.pendingTransactions.slice(-20);
+    const recentBlocks = bitcoin.chain ? bitcoin.chain.slice(-10) : [];
+    const recentTransactions = bitcoin.pendingTransactions ? bitcoin.pendingTransactions.slice(-20) : [];
     
     const dashboardData = {
       network: bitcoin.getNetworkInfo(),
       stats: bitcoin.getStats(),
       metrics: bitcoin.getNodeMetrics(),
       recentBlocks: recentBlocks.map(block => ({
-        index: block.index,
+        index: block.index || 0,
         hash: block.hash && block.hash !== '0' ? (block.hash.substring(0, 16) + '...') : 'Genesis',
-        fullHash: block.hash,
-        timestamp: block.timestamp,
-        transactions: block.transactions ? block.transactions.length : 0,
+        fullHash: block.hash || '0',
+        timestamp: block.timestamp || Date.now(),
+        transactions: (block.transactions && block.transactions.length) || 0,
         difficulty: block.difficulty || bitcoin.difficulty,
-        nonce: block.nonce
+        nonce: block.nonce || 0
       })),
       recentTransactions: recentTransactions.map(tx => ({
         id: tx.transactionId ? (tx.transactionId.substring(0, 16) + '...') : 'N/A',
-        fullId: tx.transactionId,
+        fullId: tx.transactionId || 'N/A',
         amount: tx.amount || 0,
-        sender: tx.sender && tx.sender.length > 16 ? (tx.sender.substring(0, 16) + '...') : tx.sender,
-        recipient: tx.recipient && tx.recipient.length > 16 ? (tx.recipient.substring(0, 16) + '...') : tx.recipient,
+        sender: tx.sender && tx.sender.length > 16 ? (tx.sender.substring(0, 16) + '...') : (tx.sender || 'Unknown'),
+        recipient: tx.recipient && tx.recipient.length > 16 ? (tx.recipient.substring(0, 16) + '...') : (tx.recipient || 'Unknown'),
         timestamp: tx.timestamp || Date.now(),
         fee: tx.fee || 0
       })),
-      networkNodes: bitcoin.networkNodes.length,
+      networkNodes: bitcoin.networkNodes ? bitcoin.networkNodes.length : 0,
       lastUpdate: Date.now(),
-      mempoolSize: bitcoin.pendingTransactions.length,
+      mempoolSize: bitcoin.pendingTransactions ? bitcoin.pendingTransactions.length : 0,
       isReady: true
     };
     
@@ -603,14 +610,25 @@ app.get("/api/dashboard/data", (req, res) => {
   } catch (error) {
     console.error('Dashboard data error:', error);
     res.json({ 
-      network: { name: bitcoin.networkName, token: { name: bitcoin.tokenName, symbol: bitcoin.tokenSymbol } },
-      stats: { totalBlocks: bitcoin.chain.length, totalSupply: 0, networkNodes: 0, pendingTransactions: 0 },
+      network: { 
+        name: bitcoin.networkName || 'Ekehi Network', 
+        token: { 
+          name: bitcoin.tokenName || 'Ekehi', 
+          symbol: bitcoin.tokenSymbol || 'EKH' 
+        } 
+      },
+      stats: { 
+        totalBlocks: bitcoin.chain ? bitcoin.chain.length : 0, 
+        totalSupply: 0, 
+        networkNodes: bitcoin.networkNodes ? bitcoin.networkNodes.length : 0, 
+        pendingTransactions: bitcoin.pendingTransactions ? bitcoin.pendingTransactions.length : 0 
+      },
       metrics: { uptime: 0, hashRate: 0 },
       recentBlocks: [],
       recentTransactions: [],
-      networkNodes: 0,
+      networkNodes: bitcoin.networkNodes ? bitcoin.networkNodes.length : 0,
       lastUpdate: Date.now(),
-      mempoolSize: 0,
+      mempoolSize: bitcoin.pendingTransactions ? bitcoin.pendingTransactions.length : 0,
       isReady: true
     });
   }
