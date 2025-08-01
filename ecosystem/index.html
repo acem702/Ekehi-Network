@@ -16,81 +16,126 @@
         .ecosystem-card { 
             border: none; 
             border-radius: 20px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2); 
-            margin-bottom: 25px; 
-            transition: all 0.3s ease; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1); 
+            margin-bottom: 30px; 
+            transition: all 0.4s ease; 
             background: rgba(255,255,255,0.95);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(15px);
+            overflow: hidden;
         }
-        .ecosystem-card:hover { transform: translateY(-5px); box-shadow: 0 15px 40px rgba(0,0,0,0.3); }
+        .ecosystem-card:hover { 
+            transform: translateY(-8px); 
+            box-shadow: 0 25px 50px rgba(0,0,0,0.2); 
+        }
         .hero-section { 
             background: linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9));
             color: white; 
-            padding: 60px 0; 
+            padding: 80px 0; 
             text-align: center; 
             border-radius: 0 0 50px 50px; 
-            margin-bottom: 50px;
+            margin-bottom: 60px;
+            position: relative;
+            overflow: hidden;
         }
-        .feature-icon { 
-            width: 80px; 
-            height: 80px; 
-            border-radius: 50%; 
-            background: linear-gradient(135deg, #667eea, #764ba2); 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            margin: 0 auto 20px; 
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><defs><radialGradient id="a" cx="50%" cy="40%"><stop offset="0%" stop-color="white" stop-opacity="0.1"/><stop offset="100%" stop-color="white" stop-opacity="0"/></radialGradient></defs><rect fill="url(%23a)" width="100%" height="100%"/></svg>');
+        }
+        .hero-section .container {
+            position: relative;
+            z-index: 1;
+        }
+        .wallet-section { 
+            background: linear-gradient(135deg, #00b894, #00cec9); 
             color: white; 
-            font-size: 2rem;
+            border-radius: 20px;
         }
-        .wallet-section { background: linear-gradient(135deg, #00b894, #00cec9); color: white; }
-        .activity-section { background: linear-gradient(135deg, #fdcb6e, #e17055); color: white; }
-        .community-section { background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; }
+        .activity-section { 
+            background: linear-gradient(135deg, #fdcb6e, #e17055); 
+            color: white; 
+            border-radius: 20px;
+        }
+        .community-section { 
+            background: linear-gradient(135deg, #74b9ff, #0984e3); 
+            color: white; 
+            border-radius: 20px;
+        }
         .btn-glow { 
             background: linear-gradient(135deg, #667eea, #764ba2); 
             border: none; 
             color: white; 
-            padding: 12px 30px; 
-            border-radius: 25px; 
+            padding: 14px 35px; 
+            border-radius: 30px; 
             font-weight: 600; 
             transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         .btn-glow:hover { 
-            transform: translateY(-2px); 
-            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.6);
+            transform: translateY(-3px); 
+            box-shadow: 0 12px 30px rgba(102, 126, 234, 0.6);
             color: white;
         }
-        .stats-counter { font-size: 2.5rem; font-weight: bold; color: #667eea; }
+        .stats-counter { 
+            font-size: 3rem; 
+            font-weight: 800; 
+            color: #667eea; 
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+        }
         .private-key-display { 
-            background: #2d3436; 
+            background: linear-gradient(135deg, #2d3436, #636e72); 
             color: #00b894; 
             font-family: 'Courier New', monospace; 
             font-size: 0.9rem; 
             word-break: break-all; 
-            padding: 15px; 
-            border-radius: 10px; 
+            padding: 20px; 
+            border-radius: 15px; 
             border: 2px solid #00b894;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);
         }
         .activity-item { 
-            background: rgba(255,255,255,0.1); 
+            background: rgba(255,255,255,0.15); 
+            border-radius: 20px; 
+            padding: 25px; 
+            margin-bottom: 20px; 
+            border-left: 5px solid #fdcb6e;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+        }
+        .activity-item:hover { 
+            background: rgba(255,255,255,0.25); 
+            transform: translateX(10px); 
+        }
+        .leaderboard-item { 
+            background: rgba(255,255,255,0.15); 
             border-radius: 15px; 
             padding: 20px; 
             margin-bottom: 15px; 
-            border-left: 4px solid #fdcb6e;
-            transition: all 0.3s ease;
-        }
-        .activity-item:hover { background: rgba(255,255,255,0.2); transform: translateX(5px); }
-        .leaderboard-item { 
-            background: rgba(255,255,255,0.1); 
-            border-radius: 10px; 
-            padding: 15px; 
-            margin-bottom: 10px; 
             display: flex; 
             justify-content: space-between; 
             align-items: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(5px);
         }
-        .badge-new { background: #e17055; color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.7rem; }
+        .leaderboard-item:hover {
+            background: rgba(255,255,255,0.25);
+            transform: scale(1.02);
+        }
+        .badge-new { 
+            background: linear-gradient(135deg, #e17055, #d63031); 
+            color: white; 
+            padding: 6px 12px; 
+            border-radius: 20px; 
+            font-size: 0.75rem; 
+            font-weight: 600;
+            box-shadow: 0 3px 10px rgba(231, 112, 85, 0.4);
+        }
         .floating-menu { 
             position: fixed; 
             bottom: 30px; 
@@ -98,36 +143,101 @@
             z-index: 1000;
         }
         .floating-btn { 
-            width: 60px; 
-            height: 60px; 
+            width: 65px; 
+            height: 65px; 
             border-radius: 50%; 
             background: linear-gradient(135deg, #667eea, #764ba2); 
             border: none; 
             color: white; 
-            font-size: 1.5rem; 
-            margin-bottom: 10px; 
+            font-size: 1.6rem; 
+            margin-bottom: 15px; 
             display: block; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
             transition: all 0.3s ease;
         }
         .floating-btn:hover { 
-            transform: scale(1.1); 
-            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+            transform: scale(1.15); 
+            box-shadow: 0 12px 30px rgba(0,0,0,0.4);
             color: white;
         }
         .notification-badge { 
             position: absolute; 
-            top: -5px; 
-            right: -5px; 
+            top: -8px; 
+            right: -8px; 
             background: #e17055; 
             color: white; 
             border-radius: 50%; 
-            width: 20px; 
-            height: 20px; 
+            width: 24px; 
+            height: 24px; 
             font-size: 0.7rem; 
             display: flex; 
             align-items: center; 
             justify-content: center;
+            font-weight: bold;
+        }
+        .navbar {
+            backdrop-filter: blur(20px);
+            background: rgba(0,0,0,0.8) !important;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .nav-link {
+            transition: all 0.3s ease;
+            border-radius: 25px;
+            margin: 0 5px;
+            padding: 8px 16px !important;
+        }
+        .nav-link:hover {
+            background: rgba(255,255,255,0.1);
+            transform: translateY(-2px);
+        }
+        .transaction-item {
+            background: rgba(255,255,255,0.1);
+            border-radius: 15px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #00b894;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .transaction-item:hover {
+            background: rgba(255,255,255,0.2);
+            transform: translateX(5px);
+        }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .success-animation {
+            animation: successPulse 0.6s ease-in-out;
+        }
+        @keyframes successPulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .form-control {
+            border-radius: 15px;
+            padding: 12px 20px;
+            border: 2px solid rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .form-control:focus {
+            border-color: #00b894;
+            box-shadow: 0 0 20px rgba(0, 184, 148, 0.3);
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+        .form-control::placeholder {
+            color: rgba(255,255,255,0.7);
         }
     </style>
 </head>
@@ -135,33 +245,33 @@
     <!-- Hero Section -->
     <div class="hero-section">
         <div class="container">
-            <h1 class="display-4 mb-4">
+            <h1 class="display-3 mb-4">
                 <i class="fas fa-rocket me-3"></i>Welcome to Ekehi Network Testnet
             </h1>
-            <p class="lead mb-4">Join the future of decentralized blockchain technology. Create your wallet, earn rewards, and be part of our growing ecosystem!</p>
+            <p class="lead mb-5">Join the future of decentralized blockchain technology. Create your wallet, earn rewards, and be part of our growing ecosystem!</p>
             <div class="row text-center mt-5">
-                <div class="col-md-3">
+                <div class="col-md-3 mb-3">
                     <div class="stats-counter" id="totalUsers">0</div>
-                    <p>Active Users</p>
+                    <p class="h5">Active Users</p>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 mb-3">
                     <div class="stats-counter" id="totalTransactions">0</div>
-                    <p>Transactions</p>
+                    <p class="h5">Transactions</p>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 mb-3">
                     <div class="stats-counter" id="totalRewards">0</div>
-                    <p>EKH Distributed</p>
+                    <p class="h5">EKH Distributed</p>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-3 mb-3">
                     <div class="stats-counter" id="totalBlocks">0</div>
-                    <p>Blocks Mined</p>
+                    <p class="h5">Blocks Mined</p>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
+    <nav class="navbar navbar-expand-lg navbar-dark sticky-top">
         <div class="container">
             <a class="navbar-brand" href="/"><i class="fas fa-cube me-2"></i>Ekehi Network</a>
             <div class="navbar-nav ms-auto">
@@ -184,15 +294,15 @@
                             <h2 class="mb-4"><i class="fas fa-wallet me-3"></i>Your EKH Wallet</h2>
                             
                             <div id="noWalletView">
-                                <p class="mb-4">Get started by creating your first EKH wallet or recovering an existing one.</p>
+                                <p class="mb-4 h5">Get started by creating your first EKH wallet or recovering an existing one.</p>
                                 <div class="row">
                                     <div class="col-md-6 mb-3">
-                                        <button class="btn btn-light btn-lg w-100" onclick="createNewWallet()">
+                                        <button class="btn btn-light btn-lg w-100 py-3" onclick="createNewWallet()">
                                             <i class="fas fa-plus me-2"></i>Create New Wallet
                                         </button>
                                     </div>
                                     <div class="col-md-6 mb-3">
-                                        <button class="btn btn-outline-light btn-lg w-100" onclick="showRecoverWallet()">
+                                        <button class="btn btn-outline-light btn-lg w-100 py-3" onclick="showRecoverWallet()">
                                             <i class="fas fa-key me-2"></i>Recover Wallet
                                         </button>
                                     </div>
@@ -202,20 +312,20 @@
                             <div id="walletView" style="display: none;">
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <h4>Balance</h4>
-                                        <h2 class="mb-3"><span id="walletBalance">0</span> EKH</h2>
-                                        <p><strong>Address:</strong></p>
+                                        <h4 class="mb-3">Balance</h4>
+                                        <h1 class="mb-4"><span id="walletBalance">0</span> EKH</h1>
+                                        <p class="h6"><strong>Address:</strong></p>
                                         <p class="private-key-display" id="walletAddress">-</p>
                                     </div>
                                     <div class="col-md-6">
-                                        <h4>Quick Actions</h4>
-                                        <button class="btn btn-light me-2 mb-2" onclick="showSendTransaction()">
+                                        <h4 class="mb-3">Quick Actions</h4>
+                                        <button class="btn btn-light me-2 mb-3" onclick="showSendTransaction()">
                                             <i class="fas fa-paper-plane"></i> Send EKH
                                         </button>
-                                        <button class="btn btn-outline-light me-2 mb-2" onclick="requestTestnetTokens()">
+                                        <button class="btn btn-outline-light me-2 mb-3" onclick="requestTestnetTokens()">
                                             <i class="fas fa-faucet"></i> Get Test EKH
                                         </button>
-                                        <button class="btn btn-outline-light mb-2" onclick="showPrivateKey()">
+                                        <button class="btn btn-outline-light mb-3" onclick="showPrivateKey()">
                                             <i class="fas fa-eye"></i> Show Private Key
                                         </button>
                                     </div>
@@ -223,12 +333,12 @@
                             </div>
 
                             <div id="recoverWalletView" style="display: none;">
-                                <h4>Recover Wallet</h4>
-                                <p>Enter your private key to recover your wallet:</p>
-                                <div class="mb-3">
-                                    <input type="password" class="form-control" id="privateKeyInput" placeholder="Enter your 64-character private key">
+                                <h4 class="mb-3">Recover Wallet</h4>
+                                <p class="mb-4">Enter your private key to recover your wallet:</p>
+                                <div class="mb-4">
+                                    <input type="password" class="form-control form-control-lg" id="privateKeyInput" placeholder="Enter your 64-character private key">
                                 </div>
-                                <button class="btn btn-light me-2" onclick="recoverWallet()">
+                                <button class="btn btn-light me-3" onclick="recoverWallet()">
                                     <i class="fas fa-unlock"></i> Recover Wallet
                                 </button>
                                 <button class="btn btn-outline-light" onclick="hideRecoverWallet()">Cancel</button>
@@ -240,14 +350,14 @@
                 <div class="col-lg-4">
                     <div class="ecosystem-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-chart-line me-2"></i>Wallet Stats</h5>
+                            <h5 class="mb-3"><i class="fas fa-chart-line me-2"></i>Wallet Stats</h5>
                             <div class="row text-center">
                                 <div class="col-6">
-                                    <h4 id="totalTxCount">0</h4>
+                                    <h3 id="totalTxCount">0</h3>
                                     <small>Transactions</small>
                                 </div>
                                 <div class="col-6">
-                                    <h4 id="totalEarned">0</h4>
+                                    <h3 id="totalEarned">0</h3>
                                     <small>EKH Earned</small>
                                 </div>
                             </div>
@@ -256,7 +366,7 @@
 
                     <div class="ecosystem-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-history me-2"></i>Recent Activity</h5>
+                            <h5 class="mb-3"><i class="fas fa-history me-2"></i>Recent Activity</h5>
                             <div id="recentActivity">
                                 <p class="text-muted text-center">No recent activity</p>
                             </div>
@@ -282,7 +392,7 @@
                                     </div>
                                     <div>
                                         <span class="badge badge-new">+100 EKH</span>
-                                        <button class="btn btn-light ms-2" onclick="claimDailyFaucet()" id="faucetBtn">
+                                        <button class="btn btn-light ms-3" onclick="claimDailyFaucet()" id="faucetBtn">
                                             <i class="fas fa-coins"></i> Claim
                                         </button>
                                     </div>
@@ -297,7 +407,7 @@
                                     </div>
                                     <div>
                                         <span class="badge badge-new">+5 EKH</span>
-                                        <button class="btn btn-light ms-2" onclick="showSendTransaction()">
+                                        <button class="btn btn-light ms-3" onclick="showSendTransaction()">
                                             <i class="fas fa-send"></i> Send
                                         </button>
                                     </div>
@@ -312,7 +422,7 @@
                                     </div>
                                     <div>
                                         <span class="badge badge-new">+50 EKH</span>
-                                        <button class="btn btn-light ms-2" onclick="shareReferral()">
+                                        <button class="btn btn-light ms-3" onclick="shareReferral()">
                                             <i class="fas fa-share"></i> Share
                                         </button>
                                     </div>
@@ -327,7 +437,7 @@
                                     </div>
                                     <div>
                                         <span class="badge badge-new">+10 EKH</span>
-                                        <button class="btn btn-light ms-2" onclick="window.open('/block-explorer', '_blank')">
+                                        <button class="btn btn-light ms-3" onclick="window.open('/block-explorer', '_blank')">
                                             <i class="fas fa-external-link-alt"></i> Explore
                                         </button>
                                     </div>
@@ -338,12 +448,12 @@
                         <div class="col-lg-4">
                             <div class="card bg-light text-dark">
                                 <div class="card-body text-center">
-                                    <h5>Daily Progress</h5>
-                                    <div class="progress mb-3" style="height: 20px;">
-                                        <div class="progress-bar bg-warning" role="progressbar" id="dailyProgress" style="width: 0%"></div>
+                                    <h5 class="mb-3">Daily Progress</h5>
+                                    <div class="progress mb-3" style="height: 25px;">
+                                        <div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" role="progressbar" id="dailyProgress" style="width: 0%"></div>
                                     </div>
                                     <p>Complete activities to earn more EKH!</p>
-                                    <h4 id="dailyEarnings">0 EKH</h4>
+                                    <h3 class="text-warning" id="dailyEarnings">0 EKH</h3>
                                     <small>Earned Today</small>
                                 </div>
                             </div>
@@ -363,36 +473,36 @@
                             
                             <div class="row">
                                 <div class="col-md-6">
-                                    <h4>Top Holders</h4>
+                                    <h4 class="mb-3">Top Holders</h4>
                                     <div id="topHolders">
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-crown text-warning"></i> #1 EKH123...ABC</span>
-                                            <span>1,250 EKH</span>
+                                            <span class="h6">1,250 EKH</span>
                                         </div>
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-medal text-secondary"></i> #2 EKH456...DEF</span>
-                                            <span>950 EKH</span>
+                                            <span class="h6">950 EKH</span>
                                         </div>
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-medal text-bronze"></i> #3 EKH789...GHI</span>
-                                            <span>750 EKH</span>
+                                            <span class="h6">750 EKH</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
-                                    <h4>Most Active</h4>
+                                    <h4 class="mb-3">Most Active</h4>
                                     <div id="mostActive">
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-fire text-danger"></i> EKH111...222</span>
-                                            <span>45 TXs</span>
+                                            <span class="h6">45 TXs</span>
                                         </div>
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-bolt text-warning"></i> EKH333...444</span>
-                                            <span>32 TXs</span>
+                                            <span class="h6">32 TXs</span>
                                         </div>
                                         <div class="leaderboard-item">
                                             <span><i class="fas fa-star text-info"></i> EKH555...666</span>
-                                            <span>28 TXs</span>
+                                            <span class="h6">28 TXs</span>
                                         </div>
                                     </div>
                                 </div>
@@ -400,21 +510,21 @@
 
                             <hr class="my-4" style="border-color: rgba(255,255,255,0.3);">
                             
-                            <h4>Join Our Community</h4>
-                            <p>Connect with other testnet participants and stay updated on the latest developments.</p>
+                            <h4 class="mb-3">Join Our Community</h4>
+                            <p class="h6">Connect with other testnet participants and stay updated on the latest developments.</p>
                             <div class="row">
                                 <div class="col-md-4 mb-3">
-                                    <button class="btn btn-light w-100">
+                                    <button class="btn btn-light w-100 py-3">
                                         <i class="fab fa-discord me-2"></i>Discord
                                     </button>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <button class="btn btn-light w-100">
+                                    <button class="btn btn-light w-100 py-3">
                                         <i class="fab fa-telegram me-2"></i>Telegram
                                     </button>
                                 </div>
                                 <div class="col-md-4 mb-3">
-                                    <button class="btn btn-light w-100">
+                                    <button class="btn btn-light w-100 py-3">
                                         <i class="fab fa-twitter me-2"></i>Twitter
                                     </button>
                                 </div>
@@ -425,23 +535,27 @@
 
                 <div class="col-lg-4">
                     <div class="ecosystem-card">
-                        <div class="card-body">
-                            <h5><i class="fas fa-trophy me-2"></i>Your Rank</h5>
-                            <div class="text-center">
-                                <h2 id="userRank">#-</h2>
-                                <p>by Holdings</p>
-                                <h4 id="userBalance">0 EKH</h4>
-                            </div>
+                        <div class="card-body text-center">
+                            <h5 class="mb-3"><i class="fas fa-trophy me-2"></i>Your Rank</h5>
+                            <h1 class="text-primary" id="userRank">#-</h1>
+                            <p class="h6">by Holdings</p>
+                            <h3 class="text-success" id="userBalance">0 EKH</h3>
                         </div>
                     </div>
 
                     <div class="ecosystem-card">
                         <div class="card-body">
-                            <h5><i class="fas fa-bullhorn me-2"></i>Announcements</h5>
+                            <h5 class="mb-3"><i class="fas fa-bullhorn me-2"></i>Announcements</h5>
                             <div class="small">
-                                <p><strong>🎉 Testnet Launch!</strong><br>Welcome to Ekehi Network testnet. Start earning rewards!</p>
-                                <p><strong>💰 Increased Rewards</strong><br>Daily faucet now gives 100 EKH instead of 50!</p>
-                                <p><strong>🔧 Network Update</strong><br>Improved transaction speed and reduced fees.</p>
+                                <div class="alert alert-success">
+                                    <strong>🎉 Testnet Launch!</strong><br>Welcome to Ekehi Network testnet. Start earning rewards!
+                                </div>
+                                <div class="alert alert-warning">
+                                    <strong>💰 Increased Rewards</strong><br>Daily faucet now gives 100 EKH instead of 50!
+                                </div>
+                                <div class="alert alert-info">
+                                    <strong>🔧 Network Update</strong><br>Improved transaction speed and reduced fees.
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -452,29 +566,46 @@
 
     <!-- Transaction Modal -->
     <div class="modal fade" id="sendTransactionModal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header bg-primary text-white">
                     <h5 class="modal-title"><i class="fas fa-paper-plane me-2"></i>Send EKH Tokens</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Recipient Address</label>
-                        <input type="text" class="form-control" id="recipientAddress" placeholder="EKH...">
+                    <div class="mb-4">
+                        <label class="form-label h6">Recipient Address</label>
+                        <input type="text" class="form-control form-control-lg" id="recipientAddress" placeholder="EKH..." style="color: #333;">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Amount (EKH)</label>
-                        <input type="number" class="form-control" id="sendAmount" step="0.001" min="0.001">
+                    <div class="mb-4">
+                        <label class="form-label h6">Amount (EKH)</label>
+                        <input type="number" class="form-control form-control-lg" id="sendAmount" step="0.001" min="0.001" style="color: #333;">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Transaction Fee (EKH)</label>
-                        <input type="number" class="form-control" id="transactionFee" value="0.001" step="0.001" min="0.001">
+                    <div class="mb-4">
+                        <label class="form-label h6">Transaction Fee (EKH)</label>
+                        <input type="number" class="form-control form-control-lg" id="transactionFee" value="0.001" step="0.001" min="0.001" style="color: #333;">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-glow" onclick="sendTransaction()">Send Transaction</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Details Modal -->
+    <div class="modal fade" id="transactionDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Transaction Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="transactionDetailsBody">
+                    <div class="text-center">
+                        <div class="loading-spinner"></div> Loading transaction details...
+                    </div>
                 </div>
             </div>
         </div>
@@ -521,13 +652,13 @@
 
         async function loadNetworkStats() {
             try {
-                const response = await fetch('/stats');
-                const stats = await response.json();
+                const response = await fetch('/api/dashboard/data');
+                const data = await response.json();
                 
                 document.getElementById('totalUsers').textContent = Math.max(50, Math.floor(Math.random() * 200));
-                document.getElementById('totalTransactions').textContent = stats.totalTransactions || 0;
-                document.getElementById('totalRewards').textContent = Math.floor(stats.totalSupply || 0);
-                document.getElementById('totalBlocks').textContent = stats.totalBlocks || 0;
+                document.getElementById('totalTransactions').textContent = data.stats?.totalTransactions || 0;
+                document.getElementById('totalRewards').textContent = Math.floor(data.stats?.totalSupply || 0);
+                document.getElementById('totalBlocks').textContent = data.stats?.totalBlocks || 0;
             } catch (error) {
                 console.error('Failed to load network stats:', error);
             }
@@ -645,10 +776,10 @@
             }
             
             container.innerHTML = transactions.reverse().map(tx => `
-                <div class="small mb-2 p-2 bg-light rounded">
+                <div class="transaction-item" onclick="showTransactionDetails('${tx.transactionId}')">
                     <div class="d-flex justify-content-between">
-                        <span>${tx.sender === currentWallet.address ? 'Sent' : 'Received'}</span>
-                        <span class="${tx.sender === currentWallet.address ? 'text-danger' : 'text-success'}">
+                        <span class="fw-bold">${tx.sender === currentWallet.address ? 'Sent' : 'Received'}</span>
+                        <span class="${tx.sender === currentWallet.address ? 'text-danger' : 'text-success'} fw-bold">
                             ${tx.sender === currentWallet.address ? '-' : '+'}${tx.amount} EKH
                         </span>
                     </div>
@@ -664,16 +795,19 @@
             }
 
             const now = Date.now();
-            const oneDay = 24 * 60 * 60 * 1000;
+            const oneHour = 60 * 60 * 1000; // Changed to 1 hour for better testing
             
-            if (now - lastFaucetClaim < oneDay) {
-                const nextClaim = new Date(parseInt(lastFaucetClaim) + oneDay);
+            if (now - lastFaucetClaim < oneHour) {
+                const nextClaim = new Date(parseInt(lastFaucetClaim) + oneHour);
                 showAlert(`You can claim again at ${nextClaim.toLocaleString()}`, 'info');
                 return;
             }
 
             try {
-                showLoading('Claiming faucet...');
+                const faucetBtn = document.getElementById('faucetBtn');
+                faucetBtn.innerHTML = '<div class="loading-spinner"></div> Claiming...';
+                faucetBtn.disabled = true;
+
                 const response = await fetch('/api/faucet/request', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -690,15 +824,23 @@
                     localStorage.setItem('userActivities', JSON.stringify(userActivities));
                     
                     showAlert('Successfully claimed 100 EKH!', 'success');
-                    updateWalletBalance();
-                    updateDailyProgress();
+                    faucetBtn.classList.add('success-animation');
+                    
+                    setTimeout(() => {
+                        updateWalletBalance();
+                        updateDailyProgress();
+                    }, 1000);
                 } else {
                     showAlert('Faucet claim failed: ' + result.error, 'danger');
                 }
             } catch (error) {
                 showAlert('Error claiming faucet: ' + error.message, 'danger');
+            } finally {
+                const faucetBtn = document.getElementById('faucetBtn');
+                faucetBtn.innerHTML = '<i class="fas fa-coins"></i> Claim';
+                faucetBtn.disabled = false;
+                setTimeout(() => faucetBtn.classList.remove('success-animation'), 600);
             }
-            hideLoading();
         }
 
         function showSendTransaction() {
@@ -751,8 +893,10 @@
                     userActivities.transactionsSent = (userActivities.transactionsSent || 0) + 1;
                     localStorage.setItem('userActivities', JSON.stringify(userActivities));
                     
-                    updateWalletBalance();
-                    updateDailyProgress();
+                    setTimeout(() => {
+                        updateWalletBalance();
+                        updateDailyProgress();
+                    }, 1000);
                 } else {
                     showAlert('Transaction failed: ' + result.error, 'danger');
                 }
@@ -762,15 +906,69 @@
             hideLoading();
         }
 
+        async function showTransactionDetails(transactionId) {
+            const modal = new bootstrap.Modal(document.getElementById('transactionDetailsModal'));
+            const body = document.getElementById('transactionDetailsBody');
+            
+            body.innerHTML = '<div class="text-center"><div class="loading-spinner"></div> Loading transaction details...</div>';
+            modal.show();
+            
+            try {
+                const response = await fetch(`/transaction/${transactionId}`);
+                const data = await response.json();
+                
+                if (data.transaction) {
+                    const tx = data.transaction;
+                    const block = data.block;
+                    
+                    body.innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Transaction ID</h6>
+                                <p class="font-monospace small">${tx.transactionId}</p>
+                                
+                                <h6>Amount</h6>
+                                <p class="h4 text-success">${tx.amount} EKH</p>
+                                
+                                <h6>Fee</h6>
+                                <p>${tx.fee || 0} EKH</p>
+                                
+                                <h6>Timestamp</h6>
+                                <p>${new Date(tx.timestamp).toLocaleString()}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>From</h6>
+                                <p class="font-monospace small">${tx.sender === '00' ? 'Mining Reward' : tx.sender === 'FAUCET' ? 'Testnet Faucet' : tx.sender}</p>
+                                
+                                <h6>To</h6>
+                                <p class="font-monospace small">${tx.recipient}</p>
+                                
+                                <h6>Status</h6>
+                                <p><span class="badge bg-${block ? 'success' : 'warning'}">${block ? 'Confirmed' : 'Pending'}</span></p>
+                                
+                                ${block ? `
+                                    <h6>Block</h6>
+                                    <p>Block #${block.index}</p>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    body.innerHTML = '<div class="alert alert-warning">Transaction not found</div>';
+                }
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-danger">Error loading transaction: ${error.message}</div>`;
+            }
+        }
+
         function showPrivateKey() {
             if (!currentWallet) return;
             
-            const modal = new bootstrap.Modal(document.createElement('div'));
             const modalHTML = `
                 <div class="modal fade" tabindex="-1">
                     <div class="modal-dialog">
                         <div class="modal-content">
-                            <div class="modal-header">
+                            <div class="modal-header bg-warning text-dark">
                                 <h5 class="modal-title">⚠️ Private Key</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
