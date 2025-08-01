@@ -801,8 +801,7 @@ class Blockchain {
       this.discoveryInterval = null;
       console.log('Peer discovery stopped');
     }
-
-  
+  }
 
   async discoverPeers() {
     try {
