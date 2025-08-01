@@ -1,233 +1,701 @@
+
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-  <title>Block Explorer</title>
-  <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.5.6/angular.min.js"></script>
-  <script src="https://code.jquery.com/jquery-3.3.1.min.js"
-    integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
-    integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
-    crossorigin="anonymous"></script>
-  <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ekehi Network Block Explorer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .explorer-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .metric-card {
+            background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        .search-card {
+            background: linear-gradient(45deg, #43e97b 0%, #38f9d7 100%);
+            color: white;
+        }
+        .hash-display {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-break: break-all;
+        }
+        .block-card, .tx-card {
+            border-left: 4px solid #007bff;
+            margin-bottom: 15px;
+        }
+        .address-badge {
+            background: #e9ecef;
+            color: #495057;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 0.8em;
+        }
+        .amount-display {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+        .table-responsive {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .status-badge {
+            font-size: 0.8em;
+        }
+        .block-height {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+        }
+    </style>
 </head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-cube me-2"></i>Ekehi Network Explorer
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
 
-<body ng-app="BlockExplorer">
-  <div class="container" ng-controller="MainController">
-    <div class="row">
-      <div class="col-md-8 offset-md-2">
-        <h1 id="page-title">Block Explorer</h1>
-      </div>
+    <div class="container mt-4">
+        <!-- Network Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3 mb-3">
+                <div class="card explorer-card metric-card">
+                    <div class="card-body">
+                        <i class="fas fa-cubes fa-2x mb-2"></i>
+                        <h4 id="totalBlocks">-</h4>
+                        <p class="mb-0">Total Blocks</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card explorer-card metric-card">
+                    <div class="card-body">
+                        <i class="fas fa-exchange-alt fa-2x mb-2"></i>
+                        <h4 id="totalTx">-</h4>
+                        <p class="mb-0">Transactions</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card explorer-card metric-card">
+                    <div class="card-body">
+                        <i class="fas fa-coins fa-2x mb-2"></i>
+                        <h4 id="totalSupply">-</h4>
+                        <p class="mb-0">EKH Supply</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card explorer-card metric-card">
+                    <div class="card-body">
+                        <i class="fas fa-network-wired fa-2x mb-2"></i>
+                        <h4 id="difficulty">-</h4>
+                        <p class="mb-0">Difficulty</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card explorer-card search-card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="fas fa-search me-2"></i>Search Blockchain</h5>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <input type="text" class="form-control" id="searchInput" 
+                                       placeholder="Enter block hash, transaction ID, or address...">
+                            </div>
+                            <div class="col-md-2">
+                                <select class="form-control" id="searchType">
+                                    <option value="auto">Auto-detect</option>
+                                    <option value="block">Block Hash</option>
+                                    <option value="transaction">Transaction ID</option>
+                                    <option value="address">Address</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-light w-100" onclick="performSearch()">
+                                    <i class="fas fa-search"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div class="loading-spinner" id="loadingSpinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Searching blockchain...</p>
+        </div>
+
+        <!-- Search Results -->
+        <div id="searchResults"></div>
+
+        <!-- Latest Blocks and Transactions -->
+        <div class="row">
+            <!-- Latest Blocks -->
+            <div class="col-lg-6">
+                <div class="card explorer-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Latest Blocks</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="latestBlocks">
+                            <!-- Dynamic content -->
+                        </div>
+                        <div class="text-center mt-3">
+                            <button class="btn btn-outline-primary" onclick="loadMoreBlocks()">
+                                <i class="fas fa-arrow-down"></i> Load More Blocks
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Latest Transactions -->
+            <div class="col-lg-6">
+                <div class="card explorer-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Latest Transactions</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="latestTransactions">
+                            <!-- Dynamic content -->
+                        </div>
+                        <div class="text-center mt-3">
+                            <button class="btn btn-outline-success" onclick="loadMempool()">
+                                <i class="fas fa-clock"></i> View Mempool
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rich List -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card explorer-card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0"><i class="fas fa-crown me-2"></i>Rich List - Top EKH Holders</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Rank</th>
+                                        <th>Address</th>
+                                        <th>Balance</th>
+                                        <th>Transactions</th>
+                                        <th>%</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="richListTable">
+                                    <!-- Dynamic content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="row">
-      <div class="col-md-6 offset-md-3">
-        <form ng-submit="search(searchValue)">
-          <div class="form-group">
-            <input type="text" class="form-control" ng-model="searchValue">
-          </div>
-          <div class="form-group">
-            <select class="form-control" ng-model="searchType">
-              <option value="block">Block Hash</option>
-              <option value="transaction">Transaction ID</option>
-              <option value="address">Address</option>
-            </select>
-          </div>
-          <button type="submit" class="btn btn-primary margin-auto btn-search">
-            Search
-          </button>
-          <p ng-if="!block && !transaction && !addressData && initialSearchMade" class="no-data-text">
-            No data found for search.
-          </p>
-        </form>
-      </div>
-    </div>
-    <div class="row">
-      <div class="col-md-10 offset-md-1">
 
-        <!-- 'display block' table -->
-        <h3 class="table-title" ng-if="block">Block</h3>
-        <table class="table table-striped" ng-if="block">
-          <tbody>
-            <tr>
-              <td class="bold">Block Hash</td>
-              <td>{{ block.hash }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Index</td>
-              <td>{{ block.index }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Time Stamp</td>
-              <td>{{ block.timestamp }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Nonce</td>
-              <td>{{ block.nonce }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Previous Hash</td>
-              <td>{{ block.previousBlockHash }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Number Transactions</td>
-              <td>{{ block.transactions.length }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <!-- end 'display block' table -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let blockchainData = {};
+        let currentBlockPage = 0;
 
-        <!-- 'display transaction' table -->
-        <h3 class="table-title" ng-if="transaction">Transaction</h3>
-        <table class="table table-striped" ng-if="transaction">
-          <tbody>
-            <tr>
-              <td class="bold">Sender</td>
-              <td>{{ transaction.sender }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Recipient</td>
-              <td>{{ transaction.recipient }}</td>
-            </tr>
-            <tr>
-              <td class="bold">Amount</td>
-              <td>{{ transaction.amount }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <!-- end 'display transaction' table -->
+        // Initialize explorer
+        document.addEventListener('DOMContentLoaded', function() {
+            loadExplorerData();
+            setInterval(loadExplorerData, 15000); // Refresh every 15 seconds
+        });
 
-        <!-- 'display address' table -->
-        <h3 class="table-title" ng-if="addressData">Address</h3>
-        <p id="balance-text" ng-if="addressData">(Balance: {{ addressData.addressBalance }})</p>
-        <table class="table table-striped" ng-if="addressData">
-          <thead>
-            <tr>
-              <th scope="col">Sender</th>
-              <th scope="col">Recipient</th>
-              <th scope="col">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr ng-repeat="transaction in addressData.addressTransactions">
-              <td>{{ transaction.sender }}</td>
-              <td>{{ transaction.recipient }}</td>
-              <td>{{ transaction.amount }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <!-- end 'display address' table -->
+        async function loadExplorerData() {
+            try {
+                // Load blockchain stats
+                const statsResponse = await fetch('/stats');
+                const stats = await statsResponse.json();
+                updateStats(stats);
 
-      </div>
-    </div>
-  </div>
+                // Load blockchain data
+                const blockchainResponse = await fetch('/blockchain');
+                blockchainData = await blockchainResponse.json();
 
-  <script>
-    window.app = angular.module('BlockExplorer', []);
+                // Update displays
+                updateLatestBlocks();
+                updateLatestTransactions();
+                loadRichList();
 
-    app.controller('MainController', function ($scope, $http) {
-      $scope.block = null;
-      $scope.transaction = null;
-      $scope.addressData = null;
-      $scope.initialSearchMade = false;
-
-      $scope.fetchBlock = function (blockHash) {
-        $http.get(`/block/${blockHash}`)
-          .then(response => {
-            $scope.block = response.data.block;
-            $scope.transaction = null;
-            $scope.addressData = null;
-          });
-      };
-
-      $scope.fetchTransaction = function (transactionId) {
-        $http.get(`/transaction/${transactionId}`)
-          .then(response => {
-            $scope.transaction = response.data.transaction;
-            $scope.block = null;
-            $scope.addressData = null;
-          });
-      };
-
-      $scope.fetchAddressData = function (address) {
-        $http.get(`/address/${address}`)
-          .then(response => {
-            $scope.addressData = response.data.addressData;
-            if (!$scope.addressData.addressTransactions.length) $scope
-              .addressData = null;
-            $scope.block = null;
-            $scope.transaction = null;
-          });
-      };
-
-      $scope.search = function (searchValue) {
-        $scope.initialSearchMade = true;
-        if ($scope.searchType === 'block') {
-          $scope.fetchBlock(searchValue);
+            } catch (error) {
+                console.error('Failed to load explorer data:', error);
+            }
         }
-        else if ($scope.searchType === 'transaction') {
-          $scope.fetchTransaction(searchValue);
+
+        function updateStats(stats) {
+            document.getElementById('totalBlocks').textContent = stats.totalBlocks || '-';
+            document.getElementById('totalTx').textContent = stats.totalTransactions || '-';
+            document.getElementById('totalSupply').textContent = (stats.totalSupply || 0).toFixed(2);
+            document.getElementById('difficulty').textContent = stats.difficulty || '-';
         }
-        else if ($scope.searchType === 'address') {
-          $scope.fetchAddressData(searchValue);
+
+        function updateLatestBlocks() {
+            const container = document.getElementById('latestBlocks');
+            const blocks = blockchainData.chain ? blockchainData.chain.slice(-10).reverse() : [];
+            
+            container.innerHTML = blocks.map(block => `
+                <div class="card block-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="block-height">#${block.index}</span>
+                                <small class="text-muted ms-2">${formatTime(block.timestamp)}</small>
+                            </div>
+                            <div class="text-end">
+                                <div class="badge bg-primary">${block.transactions.length} TXs</div>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <strong>Hash:</strong> 
+                            <code class="hash-display" onclick="searchSpecific('${block.hash}', 'block')" style="cursor: pointer;">
+                                ${block.hash.substring(0, 32)}...
+                            </code>
+                        </div>
+                        <div>
+                            <strong>Nonce:</strong> ${block.nonce}
+                            <strong class="ms-3">Difficulty:</strong> ${block.difficulty || 4}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
         }
-      };
 
-    });
-  </script>
+        function updateLatestTransactions() {
+            const container = document.getElementById('latestTransactions');
+            let allTransactions = [];
+            
+            if (blockchainData.chain) {
+                blockchainData.chain.forEach(block => {
+                    block.transactions.forEach(tx => {
+                        tx.blockIndex = block.index;
+                        allTransactions.push(tx);
+                    });
+                });
+            }
+            
+            const recentTx = allTransactions.slice(-10).reverse();
+            
+            container.innerHTML = recentTx.map(tx => `
+                <div class="card tx-card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong class="amount-display">${tx.amount} EKH</strong>
+                                ${tx.fee ? `<small class="text-muted">(+${tx.fee} fee)</small>` : ''}
+                            </div>
+                            <div>
+                                <span class="badge bg-info">Block #${tx.blockIndex}</span>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <div><strong>From:</strong> 
+                                <span class="address-badge" onclick="searchSpecific('${tx.sender}', 'address')" style="cursor: pointer;">
+                                    ${tx.sender === '00' ? 'MINING REWARD' : tx.sender.substring(0, 16) + '...'}
+                                </span>
+                            </div>
+                            <div><strong>To:</strong> 
+                                <span class="address-badge" onclick="searchSpecific('${tx.recipient}', 'address')" style="cursor: pointer;">
+                                    ${tx.recipient.substring(0, 16)}...
+                                </span>
+                            </div>
+                            <div class="mt-1">
+                                <small class="text-muted">TX: ${tx.transactionId.substring(0, 16)}...</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
 
-  <style type="text/css">
-    html,
-    body {
-      min-height: 100vh;
-      background-color: #e8e8e8;
-    }
+        async function loadRichList() {
+            try {
+                const response = await fetch('/richlist');
+                const data = await response.json();
+                const container = document.getElementById('richListTable');
+                
+                container.innerHTML = data.richList.slice(0, 10).map((addr, index) => `
+                    <tr>
+                        <td><span class="badge bg-warning text-dark">#${index + 1}</span></td>
+                        <td>
+                            <code class="hash-display" onclick="searchSpecific('${addr.address}', 'address')" style="cursor: pointer;">
+                                ${addr.address.substring(0, 20)}...
+                            </code>
+                        </td>
+                        <td><strong class="amount-display">${addr.addressBalance.toFixed(4)} EKH</strong></td>
+                        <td>${addr.transactionCount}</td>
+                        <td>${((addr.addressBalance / data.richList.reduce((sum, a) => sum + a.addressBalance, 0)) * 100).toFixed(2)}%</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load rich list:', error);
+            }
+        }
 
-    .container {
-      padding-top: 50px;
-      padding-bottom: 50px;
-    }
+        async function performSearch() {
+            const searchValue = document.getElementById('searchInput').value.trim();
+            const searchType = document.getElementById('searchType').value;
+            
+            if (!searchValue) {
+                alert('Please enter a search term');
+                return;
+            }
 
-    #page-title {
-      text-align: center;
-      margin-bottom: 40px;
-    }
+            showLoading(true);
+            
+            try {
+                let detectedType = searchType;
+                if (searchType === 'auto') {
+                    detectedType = detectSearchType(searchValue);
+                }
+                
+                await searchSpecific(searchValue, detectedType);
+            } catch (error) {
+                console.error('Search error:', error);
+                showSearchResults('<div class="alert alert-danger">Search failed. Please try again.</div>');
+            } finally {
+                showLoading(false);
+            }
+        }
 
-    .table-title {
-      margin-bottom: 20px;
-      text-align: center;
-    }
+        function detectSearchType(value) {
+            if (value.startsWith('EKH') && value.length === 51) {
+                return 'address';
+            } else if (value.length === 64) {
+                return 'block';
+            } else if (value.length === 32) {
+                return 'transaction';
+            }
+            return 'block'; // Default
+        }
 
-    .table {
-      background-color: #ffffff;
-      box-shadow: 2px 2px 15px -3px rgba(0, 0, 0, 0.75);
-    }
+        async function searchSpecific(searchValue, type) {
+            showLoading(true);
+            
+            try {
+                if (type === 'block') {
+                    const response = await fetch(`/block/${searchValue}`);
+                    const data = await response.json();
+                    displayBlockResult(data.block);
+                } else if (type === 'transaction') {
+                    const response = await fetch(`/transaction/${searchValue}`);
+                    const data = await response.json();
+                    displayTransactionResult(data);
+                } else if (type === 'address') {
+                    const response = await fetch(`/address/${searchValue}`);
+                    const data = await response.json();
+                    displayAddressResult(data.addressData, searchValue);
+                }
+            } catch (error) {
+                showSearchResults('<div class="alert alert-danger">No data found for search term.</div>');
+            } finally {
+                showLoading(false);
+            }
+        }
 
-    #balance-text {
-      text-align: center;
-      margin-top: -20px;
-      margin-bottom: 30px;
-    }
+        function displayBlockResult(block) {
+            if (!block) {
+                showSearchResults('<div class="alert alert-warning">Block not found.</div>');
+                return;
+            }
 
-    .margin-auto {
-      margin: auto;
-      display: block;
-    }
+            const html = `
+                <div class="card explorer-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Block #${block.index}</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Hash:</strong><br><code class="hash-display">${block.hash}</code></p>
+                                <p><strong>Previous Hash:</strong><br><code class="hash-display">${block.previousBlockHash}</code></p>
+                                <p><strong>Timestamp:</strong> ${new Date(block.timestamp).toLocaleString()}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Nonce:</strong> ${block.nonce}</p>
+                                <p><strong>Difficulty:</strong> ${block.difficulty || 4}</p>
+                                <p><strong>Transactions:</strong> ${block.transactions.length}</p>
+                                <p><strong>Total Fees:</strong> ${block.totalFees || 0} EKH</p>
+                            </div>
+                        </div>
+                        <h6 class="mt-3">Transactions in this Block:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>TX ID</th>
+                                        <th>From</th>
+                                        <th>To</th>
+                                        <th>Amount</th>
+                                        <th>Fee</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${block.transactions.map(tx => `
+                                        <tr>
+                                            <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
+                                            <td>${tx.sender === '00' ? 'MINING' : tx.sender.substring(0, 16) + '...'}</td>
+                                            <td>${tx.recipient.substring(0, 16)}...</td>
+                                            <td class="amount-display">${tx.amount} EKH</td>
+                                            <td>${tx.fee || 0} EKH</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showSearchResults(html);
+        }
 
-    .btn-search {
-      margin-bottom: 50px;
-    }
+        function displayTransactionResult(data) {
+            if (!data.transaction) {
+                showSearchResults('<div class="alert alert-warning">Transaction not found.</div>');
+                return;
+            }
 
-    .bold {
-      font-weight: 700;
-    }
+            const tx = data.transaction;
+            const block = data.block;
 
-    .no-data-text {
-      color: red;
-      text-align: center;
-    }
-  </style>
+            const html = `
+                <div class="card explorer-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Transaction Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Transaction ID:</strong><br><code class="hash-display">${tx.transactionId}</code></p>
+                                <p><strong>Amount:</strong> <span class="amount-display">${tx.amount} EKH</span></p>
+                                <p><strong>Fee:</strong> ${tx.fee || 0} EKH</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Block:</strong> #${block.index}</p>
+                                <p><strong>Timestamp:</strong> ${new Date(tx.timestamp).toLocaleString()}</p>
+                                <p><strong>Network:</strong> ${tx.network}</p>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <p><strong>From Address:</strong><br>
+                                <code class="hash-display">${tx.sender === '00' ? 'MINING REWARD' : tx.sender}</code>
+                            </p>
+                            <p><strong>To Address:</strong><br>
+                                <code class="hash-display">${tx.recipient}</code>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showSearchResults(html);
+        }
 
+        function displayAddressResult(addressData, address) {
+            if (!addressData) {
+                showSearchResults('<div class="alert alert-warning">Address not found or has no transactions.</div>');
+                return;
+            }
 
+            const html = `
+                <div class="card explorer-card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0"><i class="fas fa-wallet me-2"></i>Address Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Address:</strong><br><code class="hash-display">${address}</code></p>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="card bg-success text-white text-center">
+                                    <div class="card-body">
+                                        <h4>${addressData.addressBalance.toFixed(4)}</h4>
+                                        <p class="mb-0">Balance (EKH)</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-primary text-white text-center">
+                                    <div class="card-body">
+                                        <h4>${addressData.transactionCount}</h4>
+                                        <p class="mb-0">Transactions</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-warning text-dark text-center">
+                                    <div class="card-body">
+                                        <h4>${addressData.totalReceived.toFixed(4)}</h4>
+                                        <p class="mb-0">Total Received</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-danger text-white text-center">
+                                    <div class="card-body">
+                                        <h4>${addressData.totalSent.toFixed(4)}</h4>
+                                        <p class="mb-0">Total Sent</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <h6 class="mt-4">Transaction History:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>TX ID</th>
+                                        <th>Type</th>
+                                        <th>Amount</th>
+                                        <th>From/To</th>
+                                        <th>Time</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${addressData.addressTransactions.slice(-20).reverse().map(tx => {
+                                        const isReceived = tx.recipient === address;
+                                        return `
+                                            <tr>
+                                                <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
+                                                <td>
+                                                    <span class="badge ${isReceived ? 'bg-success' : 'bg-danger'}">
+                                                        ${isReceived ? 'Received' : 'Sent'}
+                                                    </span>
+                                                </td>
+                                                <td class="amount-display">${tx.amount} EKH</td>
+                                                <td><code>${isReceived ? tx.sender.substring(0, 16) : tx.recipient.substring(0, 16)}...</code></td>
+                                                <td>${formatTime(tx.timestamp)}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showSearchResults(html);
+        }
+
+        function showSearchResults(html) {
+            document.getElementById('searchResults').innerHTML = html;
+            document.getElementById('searchResults').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function showLoading(show) {
+            document.getElementById('loadingSpinner').style.display = show ? 'block' : 'none';
+        }
+
+        function formatTime(timestamp) {
+            return new Date(timestamp).toLocaleString();
+        }
+
+        function loadMoreBlocks() {
+            // Implement pagination for blocks
+            alert('Load more blocks functionality - can be expanded based on needs');
+        }
+
+        async function loadMempool() {
+            try {
+                const response = await fetch('/mempool');
+                const data = await response.json();
+                
+                const html = `
+                    <div class="card explorer-card">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Mempool - Pending Transactions</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Pending Transactions:</strong> ${data.count}</p>
+                            <p><strong>Total Value:</strong> ${data.totalValue} EKH</p>
+                            <p><strong>Total Fees:</strong> ${data.totalFees} EKH</p>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>TX ID</th>
+                                            <th>Amount</th>
+                                            <th>From</th>
+                                            <th>To</th>
+                                            <th>Fee</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.pendingTransactions.map(tx => `
+                                            <tr>
+                                                <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
+                                                <td class="amount-display">${tx.amount} EKH</td>
+                                                <td>${tx.sender.substring(0, 16)}...</td>
+                                                <td>${tx.recipient.substring(0, 16)}...</td>
+                                                <td>${tx.fee || 0} EKH</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                showSearchResults(html);
+            } catch (error) {
+                showSearchResults('<div class="alert alert-danger">Failed to load mempool data.</div>');
+            }
+        }
+
+        // Enter key search
+        document.getElementById('searchInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performSearch();
+            }
+        });
+    </script>
 </body>
-
 </html>
