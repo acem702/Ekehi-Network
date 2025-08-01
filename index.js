@@ -33,7 +33,7 @@ app.get("/block-explorer", (req, res) => {
 });
 
 // Block explorer data endpoint
-app.get("/api/explorer/data", (req, res) => {
+app.get("/api/explorer/data", async (req, res) => {
   try {
     // Ensure blockchain is loaded
     if (!bitcoin.chain || bitcoin.chain.length === 0) {
@@ -498,6 +498,131 @@ app.post("/mining/start", (req, res) => {
   }
 });
 
+// Enhanced ecosystem reward system
+app.post("/api/rewards/claim", async (req, res) => {
+  try {
+    const { address, activity } = req.body;
+    
+    if (!address || !bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Valid EKH address required' });
+    }
+
+    const rewardSystem = {
+      'create-wallet': { amount: 5, description: 'Create first wallet' },
+      'first-transaction': { amount: 10, description: 'Send first transaction' },
+      'explore-blockchain': { amount: 10, description: 'Use block explorer' },
+      'join-community': { amount: 15, description: 'Join community' },
+      'daily-checkin': { amount: 2, description: 'Daily check-in' },
+      'share-network': { amount: 20, description: 'Share referral link' },
+      'active-user': { amount: 5, description: 'Daily activity bonus' },
+      'transaction-volume': { amount: 3, description: 'Transaction activity' }
+    };
+
+    const reward = rewardSystem[activity];
+    if (!reward) {
+      return res.status(400).json({ error: 'Invalid activity type' });
+    }
+
+    // Check if already claimed (except daily activities)
+    const dailyActivities = ['daily-checkin', 'active-user', 'transaction-volume'];
+    if (!dailyActivities.includes(activity)) {
+      const addressData = bitcoin.getAddressData(address);
+      const alreadyClaimed = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && tx.activityType === activity
+      );
+      
+      if (alreadyClaimed) {
+        return res.status(429).json({ error: 'Reward already claimed for this activity' });
+      }
+    } else {
+      // For daily activities, check if claimed today
+      const addressData = bitcoin.getAddressData(address);
+      const today = new Date().toDateString();
+      const claimedToday = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && 
+        tx.activityType === activity && 
+        new Date(tx.timestamp).toDateString() === today
+      );
+      
+      if (claimedToday) {
+        return res.status(429).json({ 
+          error: `${reward.description} reward already claimed today` 
+        });
+      }
+    }
+
+    // Create reward transaction
+    const rewardTransaction = {
+      amount: reward.amount,
+      sender: 'ECOSYSTEM',
+      recipient: address,
+      fee: 0,
+      transactionId: uuidv4().split('-').join(''),
+      timestamp: Date.now(),
+      network: bitcoin.networkName,
+      activityType: activity,
+      description: reward.description
+    };
+    
+    await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
+    
+    res.json({
+      success: true,
+      amount: reward.amount,
+      activity: reward.description,
+      transaction: rewardTransaction.transactionId,
+      message: `${reward.amount} ${bitcoin.tokenSymbol} reward claimed!`
+    });
+  } catch (error) {
+    console.error('Reward claim error:', error);
+    res.status(500).json({ error: 'Failed to claim reward', message: error.message });
+  }
+});
+
+// Auto-reward system for user activities
+app.post("/api/rewards/auto-claim", async (req, res) => {
+  try {
+    const { address, activities } = req.body;
+    
+    if (!address || !bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Valid EKH address required' });
+    }
+
+    const claimedRewards = [];
+    
+    for (const activity of activities) {
+      try {
+        const response = await fetch(`${req.protocol}://${req.get('host')}/api/rewards/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, activity })
+        });
+
+
+
+
+        
+        if (response.ok) {
+          const result = await response.json();
+          claimedRewards.push(result);
+        }
+      } catch (error) {
+        console.log(`Failed to claim ${activity}:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      claimed: claimedRewards,
+      totalAmount: claimedRewards.reduce((sum, r) => sum + r.amount, 0)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Auto-claim failed', message: error.message });
+  }
+});
+
+
+
 app.post("/mining/stop", (req, res) => {
   try {
     bitcoin.autoMining = false;
@@ -668,7 +793,7 @@ app.get("/dashboard", (req, res) => {
   res.sendFile("./dashboard/index.html", { root: __dirname });
 });
 
-app.get("/api/dashboard/data", (req, res) => {
+app.get("/api/dashboard/data", async (req, res) => {
   try {
     // Ensure blockchain is ready
     if (!bitcoin.chain || bitcoin.chain.length === 0) {

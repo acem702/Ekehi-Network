@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Level } from 'level';
 import crypto from 'crypto';
 
+
 const currentNodeUrl = process.argv[3];
 
 class Blockchain {
@@ -44,6 +45,9 @@ class Blockchain {
 
     // Initialize LevelDB
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
+    
+    
+    
     this.initializeBlockchain();
   }
 
@@ -283,19 +287,22 @@ class Blockchain {
   }
 
   createNewTransaction(amount, sender, recipient, fee = 0) {
-    // Enforce minimum fee
-    const actualFee = Math.max(parseFloat(fee) || this.minTransactionFee, this.minTransactionFee);
+    // Enforce minimum fee - don't auto-adjust, validate as provided
+    const actualFee = parseFloat(fee) || 0;
     
     // Enhanced validation
     if (!this.isValidTransaction(amount, sender, recipient, actualFee)) {
       throw new Error('Invalid transaction');
     }
 
+    // Apply minimum fee after validation
+    const finalFee = Math.max(actualFee, this.minTransactionFee);
+
     const newTransaction = {
       amount: parseFloat(amount),
       sender,
       recipient,
-      fee: actualFee,
+      fee: finalFee,
       transactionId: uuidv4().split('-').join(''),
       timestamp: Date.now(),
       network: this.networkName
@@ -311,16 +318,16 @@ class Blockchain {
     if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
     
-    // Enforce minimum fee requirement
-    const requiredFee = parseFloat(fee) || this.minTransactionFee;
-    if (requiredFee < this.minTransactionFee) {
-      throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}`);
+    // Enforce minimum fee requirement - must be exactly what's provided, not defaulted
+    const actualFee = parseFloat(fee) || 0;
+    if (actualFee < this.minTransactionFee) {
+      throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}. Provided: ${actualFee}`);
     }
 
     // Check sender balance (except for mining rewards, faucet, and ecosystem)
     if (sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') {
       const senderData = this.getAddressData(sender);
-      const totalAmount = parseFloat(amount) + requiredFee;
+      const totalAmount = parseFloat(amount) + actualFee;
       if (senderData.addressBalance < totalAmount) {
         throw new Error(`Insufficient balance. Required: ${totalAmount} ${this.tokenSymbol}, Available: ${senderData.addressBalance} ${this.tokenSymbol}`);
       }
@@ -794,7 +801,8 @@ class Blockchain {
       this.discoveryInterval = null;
       console.log('Peer discovery stopped');
     }
-  }
+
+  
 
   async discoverPeers() {
     try {
