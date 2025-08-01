@@ -528,11 +528,25 @@ class Blockchain {
   }
 
   getStats() {
-    const totalSupply = this.chain.reduce((total, block) => {
+    // Calculate total supply from mining rewards only
+    const miningRewards = this.chain.reduce((total, block) => {
       return total + block.transactions.reduce((blockTotal, tx) => {
         return tx.sender === '00' ? blockTotal + tx.amount : blockTotal;
       }, 0);
     }, 0);
+
+    // Calculate faucet distribution
+    const faucetDistribution = this.chain.reduce((total, block) => {
+      return total + block.transactions.reduce((blockTotal, tx) => {
+        return tx.sender === 'FAUCET' ? blockTotal + tx.amount : blockTotal;
+      }, 0);
+    }, 0);
+
+    // Total supply = mining rewards + faucet distribution
+    const totalSupply = miningRewards + faucetDistribution;
+    
+    // Calculate circulating supply (excludes locked/inactive addresses)
+    const circulatingSupply = this.calculateCirculatingSupply();
 
     const totalTransactions = this.chain.reduce((total, block) => total + block.transactions.length, 0);
 
@@ -546,12 +560,79 @@ class Blockchain {
       networkNodes: this.networkNodes.length,
       totalTransactions,
       totalSupply,
+      circulatingSupply,
+      miningRewards,
+      faucetDistribution,
       miningReward: this.miningReward,
       autoMining: this.autoMining,
       isMining: this.isMining,
       minerAddress: this.minerAddress,
-      averageBlockTime: this.getAverageBlockTime()
+      averageBlockTime: this.getAverageBlockTime(),
+      inflationRate: this.calculateInflationRate(totalSupply)
     };
+  }
+
+  calculateCirculatingSupply() {
+    // Get all unique addresses and their balances
+    const addressBalances = new Map();
+    
+    this.chain.forEach(block => {
+      block.transactions.forEach(tx => {
+        // Add to recipient
+        if (tx.recipient !== '00') {
+          const currentBalance = addressBalances.get(tx.recipient) || 0;
+          addressBalances.set(tx.recipient, currentBalance + tx.amount);
+        }
+        
+        // Subtract from sender (except mining and faucet)
+        if (tx.sender !== '00' && tx.sender !== 'FAUCET') {
+          const currentBalance = addressBalances.get(tx.sender) || 0;
+          addressBalances.set(tx.sender, currentBalance - tx.amount - (tx.fee || 0));
+        }
+      });
+    });
+
+    // Calculate circulating supply (addresses with recent activity)
+    let circulatingSupply = 0;
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+    
+    for (const [address, balance] of addressBalances) {
+      if (balance > 0) {
+        // Check if address has been active in last 30 days
+        const isActive = this.isAddressActiveRecently(address, thirtyDaysAgo);
+        if (isActive || balance < 1000) { // Include all small holders and active addresses
+          circulatingSupply += balance;
+        }
+      }
+    }
+
+    return circulatingSupply;
+  }
+
+  isAddressActiveRecently(address, since) {
+    // Check if address has transactions since given timestamp
+    for (let i = this.chain.length - 1; i >= 0; i--) {
+      const block = this.chain[i];
+      if (block.timestamp < since) break;
+      
+      for (const tx of block.transactions) {
+        if (tx.sender === address || tx.recipient === address) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  calculateInflationRate(totalSupply) {
+    if (totalSupply === 0) return 0;
+    
+    // Calculate annual inflation based on current mining rate
+    const avgBlockTime = this.getAverageBlockTime() || this.targetBlockTime;
+    const blocksPerYear = (365 * 24 * 60 * 60 * 1000) / avgBlockTime;
+    const annualMiningRewards = blocksPerYear * this.miningReward;
+    
+    return (annualMiningRewards / totalSupply) * 100;
   }
 
   getAverageBlockTime() {
