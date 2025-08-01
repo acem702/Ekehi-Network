@@ -30,8 +30,8 @@ class Blockchain {
 
     // Peer discovery configuration
     this.discoverySeeds = [
-      'https://seed1.ekehi.network',
-      'https://seed2.ekehi.network'
+      'https://ekehi-network.onrender.com',
+      'https://664688a8-8264-45f8-8143-ed7bf94ca882-00-19vgtswsexh1s.worf.replit.dev'
     ];
     this.maxPeers = 20;
     this.discoveryInterval = null;
@@ -159,12 +159,16 @@ class Blockchain {
       const nonce = this.proofOfWork(previousBlockHash, currentBlockData);
       const blockHash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
 
-      // Add mining reward
-      const rewardTransaction = this.createNewTransaction(
-        this.miningReward,
-        '00',
-        this.minerAddress
-      );
+      // Add mining reward (mining rewards don't require fees)
+      const rewardTransaction = {
+        amount: this.miningReward,
+        sender: '00',
+        recipient: this.minerAddress,
+        fee: 0,
+        transactionId: uuidv4().split('-').join(''),
+        timestamp: Date.now(),
+        network: this.networkName
+      };
       currentBlockData.transactions.push(rewardTransaction);
 
       const newBlock = await this.createNewBlock(nonce, previousBlockHash, blockHash);
@@ -320,7 +324,12 @@ class Blockchain {
     if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
     
-    // Enforce minimum fee requirement - must be exactly what's provided, not defaulted
+    // Special senders don't require fees
+    if (sender === '00' || sender === 'FAUCET' || sender === 'ECOSYSTEM') {
+      return true;
+    }
+    
+    // Enforce minimum fee requirement for regular transactions
     const actualFee = parseFloat(fee) || 0;
     if (actualFee < this.minTransactionFee) {
       throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}. Provided: ${actualFee}`);
