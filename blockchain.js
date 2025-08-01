@@ -1,4 +1,3 @@
-
 import sha256 from 'sha256';
 import { v4 as uuidv4 } from 'uuid';
 import { Level } from 'level';
@@ -20,13 +19,29 @@ class Blockchain {
     this.tokenSymbol = 'EKH';
     this.networkName = 'Ekehi Network';
     this.minTransactionFee = 0.001;
-    
+
     // Auto-mining configuration
     this.autoMining = true;
     this.miningInterval = null;
     this.isMining = false;
     this.minerAddress = this.generateWalletAddress();
-    
+
+    // Peer discovery configuration
+    this.discoverySeeds = [
+      'https://seed1.ekehi.network',
+      'https://seed2.ekehi.network'
+    ];
+    this.maxPeers = 20;
+    this.discoveryInterval = null;
+    this.nodeStatus = 'active';
+    this.nodeMetrics = {
+      uptime: Date.now(),
+      blocksProcessed: 0,
+      transactionsProcessed: 0,
+      peersConnected: 0,
+      hashRate: 0
+    };
+
     // Initialize LevelDB
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
     this.initializeBlockchain();
@@ -41,7 +56,7 @@ class Blockchain {
       this.createGenesisBlock();
       await this.saveToDatabase();
     }
-    
+
     // Start auto-mining if enabled
     if (this.autoMining) {
       this.startAutoMining();
@@ -64,17 +79,17 @@ class Blockchain {
     if (address === '00') return true; // Mining reward address
     if (!address.startsWith('EKH')) return false;
     if (address.length !== 51) return false; // EKH + 48 hex characters
-    
+
     try {
       const hexPart = address.slice(3);
       const addressBytes = Buffer.from(hexPart, 'hex');
       if (addressBytes.length !== 24) return false;
-      
+
       const payload = addressBytes.slice(0, 20);
       const checksum = addressBytes.slice(20);
       const hash = crypto.createHash('sha256').update(payload).digest();
       const expectedChecksum = hash.slice(0, 4);
-      
+
       return checksum.equals(expectedChecksum);
     } catch (error) {
       return false;
@@ -85,7 +100,7 @@ class Blockchain {
   startAutoMining() {
     console.log(`Starting auto-mining on ${this.networkName}...`);
     console.log(`Miner address: ${this.minerAddress}`);
-    
+
     this.miningInterval = setInterval(async () => {
       if (!this.isMining && this.pendingTransactions.length > 0) {
         await this.autoMine();
@@ -103,10 +118,10 @@ class Blockchain {
 
   async autoMine() {
     if (this.isMining || this.pendingTransactions.length === 0) return;
-    
+
     this.isMining = true;
     console.log(`Auto-mining started - ${this.pendingTransactions.length} pending transactions`);
-    
+
     try {
       const lastBlock = this.getLastBlock();
       const previousBlockHash = lastBlock.hash;
@@ -114,10 +129,10 @@ class Blockchain {
         transactions: this.pendingTransactions.slice(0, this.maxTransactionsPerBlock),
         index: lastBlock.index + 1,
       };
-      
+
       const nonce = this.proofOfWork(previousBlockHash, currentBlockData);
       const blockHash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
-      
+
       // Add mining reward
       const rewardTransaction = this.createNewTransaction(
         this.miningReward,
@@ -125,16 +140,16 @@ class Blockchain {
         this.minerAddress
       );
       currentBlockData.transactions.push(rewardTransaction);
-      
+
       const newBlock = await this.createNewBlock(nonce, previousBlockHash, blockHash);
       this.adjustDifficulty();
-      
+
       console.log(`Block #${newBlock.index} mined successfully! Hash: ${blockHash.substring(0, 16)}...`);
       console.log(`Reward: ${this.miningReward} ${this.tokenSymbol} to ${this.minerAddress}`);
-      
+
       // Broadcast to network nodes
       await this.broadcastNewBlock(newBlock);
-      
+
     } catch (error) {
       console.error('Auto-mining error:', error);
     } finally {
@@ -151,7 +166,7 @@ class Blockchain {
         console.error(`Failed to broadcast to ${nodeUrl}:`, error.message);
       }
     });
-    
+
     await Promise.allSettled(broadcastPromises);
   }
 
@@ -161,16 +176,16 @@ class Blockchain {
       const pendingData = await this.db.get('pendingTransactions');
       const networkData = await this.db.get('networkNodes');
       const configData = await this.db.get('config');
-      
+
       this.chain = chainData || [];
       this.pendingTransactions = pendingData || [];
       this.networkNodes = networkData || [];
-      
+
       if (configData) {
         this.difficulty = configData.difficulty || this.difficulty;
         this.minerAddress = configData.minerAddress || this.minerAddress;
       }
-      
+
       if (this.chain.length === 0) {
         throw new Error('No existing blockchain found');
       }
@@ -210,7 +225,7 @@ class Blockchain {
 
   async createNewBlock(nonce, previousBlockHash, hash) {
     const processedTransactions = this.pendingTransactions.slice(0, this.maxTransactionsPerBlock);
-    
+
     // Calculate total fees
     const totalFees = processedTransactions.reduce((total, tx) => {
       return total + (tx.fee || 0);
@@ -231,7 +246,7 @@ class Blockchain {
 
     this.pendingTransactions = this.pendingTransactions.slice(this.maxTransactionsPerBlock);
     this.chain.push(newBlock);
-    
+
     await this.saveToDatabase();
     return newBlock;
   }
@@ -266,7 +281,7 @@ class Blockchain {
     if (!this.isValidAddress(sender) && sender !== '00') return false;
     if (!this.isValidAddress(recipient)) return false;
     if (fee < 0) return false;
-    
+
     // Check sender balance (except for mining rewards)
     if (sender !== '00') {
       const senderData = this.getAddressData(sender);
@@ -288,13 +303,13 @@ class Blockchain {
     let nonce = 0;
     let hash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
     const target = '0'.repeat(this.difficulty);
-    
+
     const startTime = Date.now();
     while (hash.substring(0, this.difficulty) !== target) {
       nonce++;
       hash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
     }
-    
+
     const miningTime = Date.now() - startTime;
     console.log(`Mining completed in ${miningTime}ms with nonce: ${nonce}`);
     return nonce;
@@ -305,7 +320,7 @@ class Blockchain {
     if (!transactionObj.fee) {
       transactionObj.fee = this.minTransactionFee;
     }
-    
+
     this.pendingTransactions.push(transactionObj);
     await this.saveToDatabase();
     return this.getLastBlock().index + 1;
@@ -323,7 +338,7 @@ class Blockchain {
     for (let i = 1; i < blockchain.length; i++) {
       const currentBlock = blockchain[i];
       const prevBlock = blockchain[i - 1];
-      
+
       if (!this.isValidBlockStructure(currentBlock)) {
         validChain = false;
         break;
@@ -379,26 +394,26 @@ class Blockchain {
   validateBlockTransactions(block) {
     const transactionIds = new Set();
     let totalFees = 0;
-    
+
     for (const tx of block.transactions) {
       if (transactionIds.has(tx.transactionId)) {
         return false;
       }
       transactionIds.add(tx.transactionId);
-      
+
       // Validate transaction structure and addresses
       if (!this.isValidTransaction(tx.amount, tx.sender, tx.recipient, tx.fee)) {
         return false;
       }
-      
+
       totalFees += tx.fee || 0;
     }
-    
+
     // Validate total fees match block header
     if (block.totalFees !== undefined && block.totalFees !== totalFees) {
       return false;
     }
-    
+
     return true;
   }
 
@@ -506,7 +521,7 @@ class Blockchain {
     }, 0);
 
     const totalTransactions = this.chain.reduce((total, block) => total + block.transactions.length, 0);
-    
+
     return {
       networkName: this.networkName,
       tokenName: this.tokenName,
@@ -527,24 +542,24 @@ class Blockchain {
 
   getAverageBlockTime() {
     if (this.chain.length < 2) return 0;
-    
+
     const recentBlocks = this.chain.slice(-10); // Last 10 blocks
     let totalTime = 0;
-    
+
     for (let i = 1; i < recentBlocks.length; i++) {
       totalTime += recentBlocks[i].timestamp - recentBlocks[i-1].timestamp;
     }
-    
+
     return Math.round(totalTime / (recentBlocks.length - 1));
   }
 
   adjustDifficulty() {
     if (this.chain.length < 2) return;
-    
+
     const lastBlock = this.getLastBlock();
     const secondLastBlock = this.chain[this.chain.length - 2];
     const timeDiff = lastBlock.timestamp - secondLastBlock.timestamp;
-    
+
     if (timeDiff < this.targetBlockTime / 2) {
       this.difficulty++;
       console.log(`Difficulty increased to ${this.difficulty}`);
