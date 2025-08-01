@@ -283,8 +283,11 @@ class Blockchain {
   }
 
   createNewTransaction(amount, sender, recipient, fee = 0) {
+    // Enforce minimum fee
+    const actualFee = Math.max(parseFloat(fee) || this.minTransactionFee, this.minTransactionFee);
+    
     // Enhanced validation
-    if (!this.isValidTransaction(amount, sender, recipient, fee)) {
+    if (!this.isValidTransaction(amount, sender, recipient, actualFee)) {
       throw new Error('Invalid transaction');
     }
 
@@ -292,7 +295,7 @@ class Blockchain {
       amount: parseFloat(amount),
       sender,
       recipient,
-      fee: parseFloat(fee) || this.minTransactionFee,
+      fee: actualFee,
       transactionId: uuidv4().split('-').join(''),
       timestamp: Date.now(),
       network: this.networkName
@@ -307,14 +310,19 @@ class Blockchain {
     if (!sender || !recipient) return false;
     if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
-    if (fee < 0) return false;
+    
+    // Enforce minimum fee requirement
+    const requiredFee = parseFloat(fee) || this.minTransactionFee;
+    if (requiredFee < this.minTransactionFee) {
+      throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}`);
+    }
 
     // Check sender balance (except for mining rewards, faucet, and ecosystem)
     if (sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') {
       const senderData = this.getAddressData(sender);
-      const totalAmount = parseFloat(amount) + parseFloat(fee || this.minTransactionFee);
+      const totalAmount = parseFloat(amount) + requiredFee;
       if (senderData.addressBalance < totalAmount) {
-        return false;
+        throw new Error(`Insufficient balance. Required: ${totalAmount} ${this.tokenSymbol}, Available: ${senderData.addressBalance} ${this.tokenSymbol}`);
       }
     }
     return true;
