@@ -35,7 +35,24 @@ app.get("/block-explorer", (req, res) => {
 // Block explorer data endpoint
 app.get("/api/explorer/data", (req, res) => {
   try {
-    const recentBlocks = bitcoin.chain.slice(-20).reverse();
+    // Ensure blockchain is loaded
+    if (!bitcoin.chain || bitcoin.chain.length === 0) {
+      return res.json({
+        blocks: [],
+        transactions: [],
+        stats: { 
+          totalBlocks: 0, 
+          totalTransactions: 0,
+          totalSupply: 0,
+          difficulty: bitcoin.difficulty || 1
+        },
+        isReady: false,
+        message: 'Blockchain not yet initialized'
+      });
+    }
+
+    // Get recent blocks (latest first)
+    const recentBlocks = bitcoin.chain.slice().reverse().slice(0, 20);
     const allTransactions = [];
     
     bitcoin.chain.forEach(block => {
@@ -51,7 +68,10 @@ app.get("/api/explorer/data", (req, res) => {
       }
     });
     
-    const recentTransactions = allTransactions.slice(-50).reverse();
+    // Sort transactions by timestamp (latest first)
+    const recentTransactions = allTransactions
+      .sort((a, b) => (b.timestamp || b.blockTimestamp || 0) - (a.timestamp || a.blockTimestamp || 0))
+      .slice(0, 50);
     
     res.json({
       blocks: recentBlocks.map(block => ({
@@ -568,6 +588,81 @@ app.get("/richlist", (req, res) => {
   }
 });
 
+// Ecosystem rewards system
+app.post("/api/ecosystem/claim-reward", async (req, res) => {
+  try {
+    const { address, activity } = req.body;
+    
+    if (!address || !bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Valid EKH address required' });
+    }
+
+    const rewardAmounts = {
+      'create-wallet': 5,
+      'first-transaction': 10,
+      'explore-blockchain': 10,
+      'join-community': 15,
+      'daily-checkin': 2,
+      'share-network': 20
+    };
+
+    const rewardAmount = rewardAmounts[activity];
+    if (!rewardAmount) {
+      return res.status(400).json({ error: 'Invalid activity' });
+    }
+
+    // Check if user already claimed this reward (except daily checkin)
+    if (activity !== 'daily-checkin') {
+      const addressData = bitcoin.getAddressData(address);
+      const alreadyClaimed = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && tx.activity === activity
+      );
+      
+      if (alreadyClaimed) {
+        return res.status(429).json({ error: 'Reward already claimed for this activity' });
+      }
+    } else {
+      // For daily checkin, check if claimed today
+      const addressData = bitcoin.getAddressData(address);
+      const today = new Date().toDateString();
+      const claimedToday = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && 
+        tx.activity === activity && 
+        new Date(tx.timestamp).toDateString() === today
+      );
+      
+      if (claimedToday) {
+        return res.status(429).json({ error: 'Daily reward already claimed today' });
+      }
+    }
+
+    // Create ecosystem reward transaction
+    const rewardTransaction = {
+      amount: rewardAmount,
+      sender: 'ECOSYSTEM',
+      recipient: address,
+      fee: 0,
+      transactionId: uuidv4().split('-').join(''),
+      timestamp: Date.now(),
+      network: bitcoin.networkName,
+      activity: activity
+    };
+    
+    await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
+    
+    res.json({
+      success: true,
+      amount: rewardAmount,
+      activity: activity,
+      transaction: rewardTransaction.transactionId,
+      message: `${rewardAmount} ${bitcoin.tokenSymbol} reward claimed for ${activity}!`
+    });
+  } catch (error) {
+    console.error('Ecosystem reward error:', error);
+    res.status(500).json({ error: 'Failed to claim reward', message: error.message });
+  }
+});
+
 // Enhanced dashboard and monitoring endpoints
 app.get("/dashboard", (req, res) => {
   res.sendFile("./dashboard/index.html", { root: __dirname });
@@ -575,8 +670,36 @@ app.get("/dashboard", (req, res) => {
 
 app.get("/api/dashboard/data", (req, res) => {
   try {
-    const recentBlocks = bitcoin.chain ? bitcoin.chain.slice(-10) : [];
-    const recentTransactions = bitcoin.pendingTransactions ? bitcoin.pendingTransactions.slice(-20) : [];
+    // Ensure blockchain is ready
+    if (!bitcoin.chain || bitcoin.chain.length === 0) {
+      return res.json({
+        network: { 
+          name: bitcoin.networkName || 'Ekehi Network', 
+          token: { 
+            name: bitcoin.tokenName || 'Ekehi', 
+            symbol: bitcoin.tokenSymbol || 'EKH' 
+          } 
+        },
+        stats: { 
+          totalBlocks: 0, 
+          totalSupply: 0, 
+          networkNodes: 0, 
+          pendingTransactions: 0 
+        },
+        metrics: { uptime: 0, hashRate: 0 },
+        recentBlocks: [],
+        recentTransactions: [],
+        networkNodes: 0,
+        lastUpdate: Date.now(),
+        mempoolSize: 0,
+        isReady: false,
+        message: 'Blockchain initializing...'
+      });
+    }
+
+    // Get recent blocks (latest first)
+    const recentBlocks = bitcoin.chain.slice().reverse().slice(0, 10);
+    const recentPendingTx = bitcoin.pendingTransactions ? bitcoin.pendingTransactions.slice().reverse().slice(0, 20) : [];
     
     const dashboardData = {
       network: bitcoin.getNetworkInfo(),
@@ -591,7 +714,7 @@ app.get("/api/dashboard/data", (req, res) => {
         difficulty: block.difficulty || bitcoin.difficulty,
         nonce: block.nonce || 0
       })),
-      recentTransactions: recentTransactions.map(tx => ({
+      recentTransactions: recentPendingTx.map(tx => ({
         id: tx.transactionId ? (tx.transactionId.substring(0, 16) + '...') : 'N/A',
         fullId: tx.transactionId || 'N/A',
         amount: tx.amount || 0,

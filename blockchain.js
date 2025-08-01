@@ -49,14 +49,22 @@ class Blockchain {
 
   async initializeBlockchain() {
     try {
-      // Ensure database directory exists and is accessible
+      // Initialize database first
       await this.db.open();
+      console.log('Database opened successfully');
+      
+      // Try to load existing data
       await this.loadFromDatabase();
       console.log(`${this.networkName} loaded with ${this.chain.length} blocks`);
     } catch (error) {
       console.log(`Creating new ${this.networkName}...`);
       this.createGenesisBlock();
+      
+      // Save after ensuring DB is open
       try {
+        if (!this.db.status || this.db.status === 'opening') {
+          await this.db.open();
+        }
         await this.saveToDatabase();
         console.log('Genesis block created and saved');
       } catch (saveError) {
@@ -208,6 +216,11 @@ class Blockchain {
 
   async saveToDatabase() {
     try {
+      // Ensure database is ready
+      if (this.db.status !== 'open') {
+        await this.db.open();
+      }
+      
       await this.db.put('blockchain', this.chain);
       await this.db.put('pendingTransactions', this.pendingTransactions);
       await this.db.put('networkNodes', this.networkNodes);
@@ -292,12 +305,12 @@ class Blockchain {
     if (amount <= 0) return false;
     if (sender === recipient) return false;
     if (!sender || !recipient) return false;
-    if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET') return false;
+    if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
     if (fee < 0) return false;
 
-    // Check sender balance (except for mining rewards and faucet)
-    if (sender !== '00' && sender !== 'FAUCET') {
+    // Check sender balance (except for mining rewards, faucet, and ecosystem)
+    if (sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') {
       const senderData = this.getAddressData(sender);
       const totalAmount = parseFloat(amount) + parseFloat(fee || this.minTransactionFee);
       if (senderData.addressBalance < totalAmount) {
@@ -542,8 +555,15 @@ class Blockchain {
       }, 0);
     }, 0);
 
-    // Total supply = mining rewards + faucet distribution
-    const totalSupply = miningRewards + faucetDistribution;
+    // Calculate ecosystem rewards
+    const ecosystemDistribution = this.chain.reduce((total, block) => {
+      return total + block.transactions.reduce((blockTotal, tx) => {
+        return tx.sender === 'ECOSYSTEM' ? blockTotal + tx.amount : blockTotal;
+      }, 0);
+    }, 0);
+
+    // Total supply = mining rewards + faucet distribution + ecosystem rewards
+    const totalSupply = miningRewards + faucetDistribution + ecosystemDistribution;
     
     // Calculate circulating supply (excludes locked/inactive addresses)
     const circulatingSupply = this.calculateCirculatingSupply();

@@ -247,7 +247,8 @@
                 return;
             }
 
-            const recentBlocks = blocks.slice(-10).reverse(); // Last 10 blocks, newest first
+            // Blocks are already sorted latest first from API
+            const recentBlocks = blocks.slice(0, 10);
             container.innerHTML = recentBlocks.map(block => `
                 <div class="block-item" style="cursor: pointer;" onclick="showBlockDetails('${block.hash}')">
                     <div class="d-flex justify-content-between align-items-start">
@@ -278,11 +279,12 @@
         function updateRecentTransactions(transactions) {
             const container = document.getElementById('recentTransactions');
             if (!transactions.length) {
-                container.innerHTML = '<div class="text-center text-muted">No pending transactions</div>';
+                container.innerHTML = '<div class="text-center text-muted">No recent transactions</div>';
                 return;
             }
 
-            container.innerHTML = transactions.slice(-20).reverse().map(tx => `
+            // Transactions are already sorted latest first from API
+            container.innerHTML = transactions.slice(0, 20).map(tx => `
                 <div class="tx-item" style="cursor: pointer;" onclick="showTransactionDetails('${tx.transactionId}')">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
