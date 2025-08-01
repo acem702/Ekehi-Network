@@ -209,28 +209,19 @@
 
         async function loadExplorerData() {
             try {
-                const [statsResponse, blockchainResponse, mempoolResponse] = await Promise.all([
-                    fetch('/stats'),
-                    fetch('/blockchain'),
-                    fetch('/mempool')
-                ]);
+                const response = await fetch('/api/explorer/data');
+                const data = await response.json();
 
-                if (!statsResponse.ok || !blockchainResponse.ok || !mempoolResponse.ok) {
-                    throw new Error('Failed to fetch data');
+                if (data.isReady) {
+                    displayBlocks(data.blocks || []);
+                    displayTransactions(data.transactions || []);
+                    updateStats(data.stats || {});
+                } else {
+                    showError('Explorer data not ready: ' + (data.error || 'Unknown error'));
                 }
-
-                const stats = await statsResponse.json();
-                const blockchain = await blockchainResponse.json();
-                const mempool = await mempoolResponse.json();
-
-                updateStats(stats);
-                updateRecentBlocks(blockchain.chain || []);
-                updateRecentTransactions(mempool.pendingTransactions || []);
-
-                document.getElementById('mempoolCount').textContent = `${mempool.count || 0} pending`;
             } catch (error) {
                 console.error('Failed to load explorer data:', error);
-                showAlert('Failed to load explorer data', 'danger');
+                showError('Failed to load blockchain data');
             }
         }
 
