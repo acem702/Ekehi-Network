@@ -232,6 +232,14 @@
             document.getElementById('difficulty').textContent = stats.difficulty || 0;
         }
 
+        function displayBlocks(blocks) {
+            updateRecentBlocks(blocks);
+        }
+
+        function displayTransactions(transactions) {
+            updateRecentTransactions(transactions);
+        }
+
         function updateRecentBlocks(blocks) {
             const container = document.getElementById('recentBlocks');
             if (!blocks.length) {

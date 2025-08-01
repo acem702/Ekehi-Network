@@ -274,6 +274,23 @@
         </div>
     </div>
 
+    <!-- Transaction Details Modal -->
+    <div class="modal fade" id="transactionDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Transaction Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="transactionDetailsBody">
+                    <div class="text-center">
+                        <i class="fas fa-spinner fa-spin"></i> Loading transaction details...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let refreshInterval;
@@ -446,7 +463,7 @@
             }
             
             container.innerHTML = transactions.map(tx => `
-                <div class="tx-item">
+                <div class="tx-item" style="cursor: pointer;" onclick="showTransactionDetails('${tx.fullId || tx.id}')">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <strong>${tx.amount} EKH</strong>
@@ -459,6 +476,51 @@
                     </div>
                 </div>
             `).join('');
+        }
+
+        async function showTransactionDetails(transactionId) {
+            if (!transactionId || transactionId === 'N/A') {
+                showAlert('Transaction ID not available', 'warning');
+                return;
+            }
+
+            const modal = new bootstrap.Modal(document.getElementById('transactionDetailsModal'));
+            const body = document.getElementById('transactionDetailsBody');
+            
+            body.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading transaction details...</div>';
+            modal.show();
+            
+            try {
+                const response = await fetch(`/transaction/${transactionId}`);
+                const data = await response.json();
+                
+                if (data.transaction) {
+                    const tx = data.transaction;
+                    const block = data.block;
+                    
+                    body.innerHTML = `
+                        <table class="table table-striped">
+                            <tr><th>Transaction ID</th><td class="font-monospace small">${tx.transactionId}</td></tr>
+                            <tr><th>Amount</th><td><strong>${tx.amount} EKH</strong></td></tr>
+                            <tr><th>Sender</th><td class="font-monospace small">${tx.sender === '00' ? 'Mining Reward' : tx.sender === 'FAUCET' ? 'Testnet Faucet' : tx.sender}</td></tr>
+                            <tr><th>Recipient</th><td class="font-monospace small">${tx.recipient}</td></tr>
+                            <tr><th>Fee</th><td>${tx.fee || 0} EKH</td></tr>
+                            <tr><th>Timestamp</th><td>${new Date(tx.timestamp).toLocaleString()}</td></tr>
+                            <tr><th>Network</th><td>${tx.network || 'Ekehi Network'}</td></tr>
+                            ${block ? `
+                                <tr><th>Block</th><td>Block #${block.index}</td></tr>
+                                <tr><th>Status</th><td><span class="badge bg-success">Confirmed</span></td></tr>
+                            ` : `
+                                <tr><th>Status</th><td><span class="badge bg-warning">Pending</span></td></tr>
+                            `}
+                        </table>
+                    `;
+                } else {
+                    body.innerHTML = '<div class="alert alert-warning">Transaction not found</div>';
+                }
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-danger">Error loading transaction: ${error.message}</div>`;
+            }
         }
 
         async function startMining() {
