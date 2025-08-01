@@ -49,18 +49,30 @@ class Blockchain {
 
   async initializeBlockchain() {
     try {
+      // Ensure database directory exists and is accessible
+      await this.db.open();
       await this.loadFromDatabase();
       console.log(`${this.networkName} loaded with ${this.chain.length} blocks`);
     } catch (error) {
       console.log(`Creating new ${this.networkName}...`);
       this.createGenesisBlock();
-      await this.saveToDatabase();
+      try {
+        await this.saveToDatabase();
+        console.log('Genesis block created and saved');
+      } catch (saveError) {
+        console.error('Failed to save genesis block:', saveError);
+        // Continue without persistent storage for now
+      }
     }
 
     // Start auto-mining if enabled
     if (this.autoMining) {
       this.startAutoMining();
     }
+
+    // Start peer discovery and metrics
+    this.startPeerDiscovery();
+    this.startMetricsCollection();
   }
 
   // Generate EKH wallet address
@@ -201,10 +213,12 @@ class Blockchain {
       await this.db.put('networkNodes', this.networkNodes);
       await this.db.put('config', {
         difficulty: this.difficulty,
-        minerAddress: this.minerAddress
+        minerAddress: this.minerAddress,
+        lastSaved: Date.now()
       });
     } catch (error) {
       console.error('Error saving to database:', error);
+      // Continue operation even if database save fails
     }
   }
 
@@ -591,6 +605,88 @@ class Blockchain {
       blockTime: this.targetBlockTime,
       miningReward: this.miningReward
     };
+  }
+
+  // Node metrics for dashboard
+  getNodeMetrics() {
+    const currentTime = Date.now();
+    const uptime = currentTime - this.nodeMetrics.uptime;
+    
+    // Calculate hash rate based on recent mining activity
+    let hashRate = 0;
+    if (this.chain.length > 1) {
+      const recentBlocks = this.chain.slice(-5);
+      let totalNonces = 0;
+      let totalTime = 0;
+      
+      for (let i = 1; i < recentBlocks.length; i++) {
+        totalNonces += recentBlocks[i].nonce;
+        totalTime += recentBlocks[i].timestamp - recentBlocks[i-1].timestamp;
+      }
+      
+      if (totalTime > 0) {
+        hashRate = (totalNonces / (totalTime / 1000)); // Hashes per second
+      }
+    }
+
+    return {
+      uptime,
+      blocksProcessed: this.chain.length - 1, // Exclude genesis
+      transactionsProcessed: this.chain.reduce((total, block) => total + block.transactions.length, 0),
+      peersConnected: this.networkNodes.length,
+      hashRate,
+      memoryUsage: process.memoryUsage(),
+      nodeStatus: this.nodeStatus,
+      lastBlockTime: this.chain.length > 0 ? this.getLastBlock().timestamp : null
+    };
+  }
+
+  // Peer discovery functionality
+  async startPeerDiscovery() {
+    console.log('Starting peer discovery...');
+    this.discoveryInterval = setInterval(async () => {
+      await this.discoverPeers();
+    }, 30000); // Discover peers every 30 seconds
+  }
+
+  stopPeerDiscovery() {
+    if (this.discoveryInterval) {
+      clearInterval(this.discoveryInterval);
+      this.discoveryInterval = null;
+      console.log('Peer discovery stopped');
+    }
+  }
+
+  async discoverPeers() {
+    try {
+      // Simulate peer discovery (in real implementation, would contact seed nodes)
+      console.log(`Peer discovery: ${this.networkNodes.length} peers connected`);
+      
+      // Update metrics
+      this.nodeMetrics.peersConnected = this.networkNodes.length;
+      
+      return {
+        discovered: 0,
+        total: this.networkNodes.length
+      };
+    } catch (error) {
+      console.error('Peer discovery error:', error);
+      return { discovered: 0, total: this.networkNodes.length };
+    }
+  }
+
+  // Start all background processes
+  startMetricsCollection() {
+    setInterval(() => {
+      this.nodeMetrics.uptime = Date.now() - this.nodeMetrics.uptime;
+    }, 60000); // Update every minute
+  }
+
+  // Stop all processes
+  stopAllProcesses() {
+    this.stopAutoMining();
+    this.stopPeerDiscovery();
+    console.log('All node processes stopped');
   }
 }
 
