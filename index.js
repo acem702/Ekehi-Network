@@ -983,6 +983,97 @@ app.post("/api/faucet/request", async (req, res) => {
   }
 });
 
+// Network synchronization endpoint
+app.post("/api/network/sync", async (req, res) => {
+  try {
+    const { nodeUrl } = req.body;
+    
+    if (!nodeUrl) {
+      return res.status(400).json({ error: 'Node URL required' });
+    }
+
+    // Add the node to network if not already present
+    await bitcoin.addNetworkNode(nodeUrl);
+
+    // Fetch blockchain from the node
+    const requestOptions = {
+      uri: nodeUrl + "/blockchain",
+      method: "GET",
+      json: true,
+      timeout: 10000
+    };
+
+    try {
+      const response = await rp(requestOptions);
+      
+      if (response && response.chain) {
+        const chainReplaced = await bitcoin.resolveConflicts([response]);
+        
+        res.json({
+          success: true,
+          nodeAdded: true,
+          chainReplaced,
+          networkSize: bitcoin.networkNodes.length,
+          localBlocks: bitcoin.chain.length,
+          remoteBlocks: response.chain.length
+        });
+      } else {
+        res.json({
+          success: true,
+          nodeAdded: true,
+          chainReplaced: false,
+          message: 'Node added but no valid blockchain received'
+        });
+      }
+    } catch (syncError) {
+      // Still add the node even if sync fails
+      res.json({
+        success: true,
+        nodeAdded: true,
+        chainReplaced: false,
+        error: 'Node added but sync failed: ' + syncError.message
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Network sync failed', message: error.message });
+  }
+});
+
+// Auto-sync with network nodes periodically
+app.post("/api/network/auto-sync", async (req, res) => {
+  try {
+    if (bitcoin.networkNodes.length === 0) {
+      return res.json({ message: 'No network nodes to sync with' });
+    }
+
+    const syncResults = [];
+    
+    for (const nodeUrl of bitcoin.networkNodes) {
+      try {
+        const requestOptions = {
+          uri: nodeUrl + "/blockchain",
+          method: "GET",
+          json: true,
+          timeout: 5000
+        };
+        
+        const response = await rp(requestOptions);
+        syncResults.push({ node: nodeUrl, success: true, blocks: response.chain.length });
+      } catch (error) {
+        syncResults.push({ node: nodeUrl, success: false, error: error.message });
+      }
+    }
+
+    res.json({
+      syncResults,
+      networkSize: bitcoin.networkNodes.length,
+      localBlocks: bitcoin.chain.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Auto-sync failed', message: error.message });
+  }
+});
+
 // API documentation endpoint
 app.get("/api/docs", (req, res) => {
   res.json({

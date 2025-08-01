@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -305,7 +304,7 @@
             refreshInterval = setInterval(() => {
                 refreshCountdown--;
                 document.getElementById('refreshTimer').textContent = refreshCountdown;
-                
+
                 if (refreshCountdown <= 0) {
                     loadDashboardData();
                     refreshCountdown = 10;
@@ -324,11 +323,11 @@
                     throw new Error(`HTTP ${response.status}`);
                 }
                 const data = await response.json();
-                
+
                 if (!data.isReady) {
                     throw new Error(data.message || 'Dashboard not ready');
                 }
-                
+
                 updateDashboard(data);
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
@@ -343,38 +342,38 @@
                 document.getElementById('totalSupply').textContent = (data.stats?.totalSupply || 0).toFixed(1);
                 document.getElementById('totalTx').textContent = data.stats?.totalTransactions || 0;
                 document.getElementById('networkNodes').textContent = data.stats?.networkNodes || 0;
-                
+
                 // Update mining status
                 const isMining = data.stats?.autoMining;
                 document.getElementById('miningStatus').textContent = isMining ? 'Active' : 'Inactive';
                 const indicator = document.getElementById('miningIndicator');
                 indicator.className = `status-indicator ${isMining ? 'status-active' : 'status-inactive'}`;
-                
+
                 document.getElementById('difficulty').textContent = data.stats?.difficulty || 0;
                 document.getElementById('hashRate').textContent = (data.metrics?.hashRate || 0).toFixed(2);
                 document.getElementById('pendingTx').textContent = data.stats?.pendingTransactions || 0;
                 document.getElementById('avgBlockTime').textContent = (data.stats?.averageBlockTime / 1000 || 0).toFixed(1);
                 document.getElementById('miningReward').textContent = data.stats?.miningReward || 0;
-                
+
                 // Update network info
                 document.getElementById('networkName').textContent = data.network?.name || 'Unknown';
                 document.getElementById('tokenInfo').textContent = `${data.network?.token?.name || 'Unknown'} (${data.network?.token?.symbol || 'N/A'})`;
                 document.getElementById('version').textContent = data.network?.version || '1.0.0';
                 document.getElementById('blockTime').textContent = (data.network?.blockTime / 1000 || 0).toFixed(0);
                 document.getElementById('uptime').textContent = formatDuration(data.metrics?.uptime || 0);
-                
+
                 // Update peer information
                 updatePeerInfo(data);
-                
+
                 // Update token economics
                 updateTokenEconomics(data);
-                
+
                 // Update recent blocks
                 updateRecentBlocks(data.recentBlocks || []);
-                
+
                 // Update recent transactions
                 updateRecentTransactions(data.recentTransactions || []);
-                
+
             } catch (error) {
                 console.error('Error updating dashboard:', error);
             }
@@ -385,7 +384,7 @@
             document.getElementById('maxPeers').textContent = '20'; // From blockchain config
             document.getElementById('discoveryStatus').textContent = 'Active';
             document.getElementById('nodeUrl').textContent = window.location.origin;
-            
+
             // Update peers list
             const peersList = document.getElementById('peersList');
             if (data.networkNodes && data.networkNodes > 0) {
@@ -412,18 +411,18 @@
             const totalSupply = data.stats?.totalSupply || 0;
             const totalBlocks = data.stats?.totalBlocks || 0;
             const miningReward = data.stats?.miningReward || 0;
-            
+
             // Calculate faucet issued tokens (approximate)
             const faucetIssued = Math.min(totalSupply * 0.1, 10000); // Estimate faucet tokens
-            
+
             // Calculate circulating supply (total minus large inactive holders)
             const circulatingSupply = totalSupply * 0.95; // Assume 95% is circulating
-            
+
             // Calculate inflation rate based on mining
             const blocksPerDay = (24 * 60 * 60) / ((data.stats?.averageBlockTime || 10000) / 1000);
             const dailyInflation = (blocksPerDay * miningReward) / totalSupply * 100;
             const annualInflation = dailyInflation * 365;
-            
+
             document.getElementById('tokenTotalSupply').textContent = totalSupply.toFixed(1);
             document.getElementById('tokenCirculating').textContent = circulatingSupply.toFixed(1);
             document.getElementById('tokenMiningReward').textContent = miningReward;
@@ -438,7 +437,7 @@
                 container.innerHTML = '<div class="text-center text-muted">No blocks available</div>';
                 return;
             }
-            
+
             container.innerHTML = blocks.reverse().map(block => `
                 <div class="block-item">
                     <div class="d-flex justify-content-between align-items-center">
@@ -461,7 +460,7 @@
                 container.innerHTML = '<div class="text-center text-muted">No pending transactions</div>';
                 return;
             }
-            
+
             container.innerHTML = transactions.map(tx => `
                 <div class="tx-item" style="cursor: pointer;" onclick="showTransactionDetails('${tx.fullId || tx.id}')">
                     <div class="d-flex justify-content-between align-items-center">
@@ -486,18 +485,18 @@
 
             const modal = new bootstrap.Modal(document.getElementById('transactionDetailsModal'));
             const body = document.getElementById('transactionDetailsBody');
-            
+
             body.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading transaction details...</div>';
             modal.show();
-            
+
             try {
                 const response = await fetch(`/transaction/${transactionId}`);
                 const data = await response.json();
-                
+
                 if (data.transaction) {
                     const tx = data.transaction;
                     const block = data.block;
-                    
+
                     body.innerHTML = `
                         <table class="table table-striped">
                             <tr><th>Transaction ID</th><td class="font-monospace small">${tx.transactionId}</td></tr>
@@ -549,7 +548,7 @@
             try {
                 const response = await fetch('/wallet/create');
                 const result = await response.json();
-                
+
                 document.getElementById('walletResult').innerHTML = `
                     <div class="alert alert-success">
                         <strong>New Wallet Created!</strong><br>
@@ -585,7 +584,7 @@
                     body: JSON.stringify({ address })
                 });
                 const result = await response.json();
-                
+
                 if (result.success) {
                     document.getElementById('faucetResult').innerHTML = `
                         <div class="alert alert-success">
@@ -646,7 +645,7 @@
 
         async function restartNode() {
             if (!confirm('Are you sure you want to restart the node?')) return;
-            
+
             try {
                 const response = await fetch('/api/node/restart', { method: 'POST' });
                 const result = await response.json();
@@ -672,7 +671,7 @@
             const minutes = Math.floor(seconds / 60);
             const hours = Math.floor(minutes / 60);
             const days = Math.floor(hours / 24);
-            
+
             if (days > 0) return `${days}d ${hours % 24}h`;
             if (hours > 0) return `${hours}h ${minutes % 60}m`;
             if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
@@ -688,13 +687,77 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             `;
             document.body.appendChild(alertDiv);
-            
+
             setTimeout(() => {
                 if (alertDiv.parentNode) {
                     alertDiv.parentNode.removeChild(alertDiv);
                 }
             }, 5000);
         }
+
+            // Add network node
+            async function addNetworkNode() {
+                const nodeUrl = document.getElementById('node-url').value.trim();
+                if (!nodeUrl) {
+                    alert('Please enter a node URL');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/network/sync', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nodeUrl })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        document.getElementById('sync-status').innerHTML = `
+                            <div class="alert alert-success alert-sm">
+                                Node added! Chain replaced: ${result.chainReplaced}, Network size: ${result.networkSize}
+                            </div>
+                        `;
+                        document.getElementById('node-url').value = '';
+                        loadDashboardData(); // Refresh data
+                    } else {
+                        throw new Error(result.error || 'Failed to add node');
+                    }
+                } catch (error) {
+                    document.getElementById('sync-status').innerHTML = `
+                        <div class="alert alert-danger alert-sm">
+                            Error: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+
+            // Sync with network
+            async function syncWithNetwork() {
+                try {
+                    const response = await fetch('/api/network/auto-sync', {
+                        method: 'POST'
+                    });
+
+                    const result = await response.json();
+
+                    document.getElementById('sync-status').innerHTML = `
+                        <div class="alert alert-info alert-sm">
+                            Sync completed. Network size: ${result.networkSize}, Local blocks: ${result.localBlocks}
+                        </div>
+                    `;
+                    loadDashboardData(); // Refresh data
+                } catch (error) {
+                    document.getElementById('sync-status').innerHTML = `
+                        <div class="alert alert-danger alert-sm">
+                            Sync failed: ${error.message}
+                        </div>
+                    `;
+                }
+            }
+
+            // Load dashboard data on page load
+            loadDashboardData();
     </script>
 </body>
 </html>
