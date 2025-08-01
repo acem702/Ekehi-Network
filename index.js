@@ -33,7 +33,7 @@ app.get("/block-explorer", (req, res) => {
 });
 
 // Block explorer data endpoint
-app.get("/api/explorer/data", (req, res) => {
+app.get("/api/explorer/data", async (req, res) => {
   try {
     // Ensure blockchain is loaded
     if (!bitcoin.chain || bitcoin.chain.length === 0) {
@@ -498,6 +498,281 @@ app.post("/mining/start", (req, res) => {
   }
 });
 
+// Enhanced ecosystem reward system
+app.post("/api/rewards/claim", async (req, res) => {
+  try {
+    const { address, activity } = req.body;
+    
+    if (!address || !bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Valid EKH address required' });
+    }
+
+    const rewardSystem = {
+      'create-wallet': { amount: 5, description: 'Create first wallet' },
+      'first-transaction': { amount: 10, description: 'Send first transaction' },
+      'explore-blockchain': { amount: 10, description: 'Use block explorer' },
+      'join-community': { amount: 15, description: 'Join community' },
+      'daily-checkin': { amount: 2, description: 'Daily check-in' },
+      'share-network': { amount: 20, description: 'Share referral link' },
+      'active-user': { amount: 5, description: 'Daily activity bonus' },
+      'transaction-volume': { amount: 3, description: 'Transaction activity' }
+    };
+
+    const reward = rewardSystem[activity];
+    if (!reward) {
+      return res.status(400).json({ error: 'Invalid activity type' });
+    }
+
+    // Check if already claimed (except daily activities)
+    const dailyActivities = ['daily-checkin', 'active-user', 'transaction-volume'];
+    if (!dailyActivities.includes(activity)) {
+      const addressData = bitcoin.getAddressData(address);
+      const alreadyClaimed = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && tx.activityType === activity
+      );
+      
+      if (alreadyClaimed) {
+        return res.status(429).json({ error: 'Reward already claimed for this activity' });
+      }
+    } else {
+      // For daily activities, check if claimed today
+      const addressData = bitcoin.getAddressData(address);
+      const today = new Date().toDateString();
+      const claimedToday = addressData.addressTransactions.some(tx => 
+        tx.sender === 'ECOSYSTEM' && 
+        tx.activityType === activity && 
+        new Date(tx.timestamp).toDateString() === today
+      );
+      
+      if (claimedToday) {
+        return res.status(429).json({ 
+          error: `${reward.description} reward already claimed today` 
+        });
+      }
+    }
+
+    // Create reward transaction
+    const rewardTransaction = {
+      amount: reward.amount,
+      sender: 'ECOSYSTEM',
+      recipient: address,
+      fee: 0,
+      transactionId: uuidv4().split('-').join(''),
+      timestamp: Date.now(),
+      network: bitcoin.networkName,
+      activityType: activity,
+      description: reward.description
+    };
+    
+    await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
+    
+    res.json({
+      success: true,
+      amount: reward.amount,
+      activity: reward.description,
+      transaction: rewardTransaction.transactionId,
+      message: `${reward.amount} ${bitcoin.tokenSymbol} reward claimed!`
+    });
+  } catch (error) {
+    console.error('Reward claim error:', error);
+    res.status(500).json({ error: 'Failed to claim reward', message: error.message });
+  }
+});
+
+// Auto-reward system for user activities
+app.post("/api/rewards/auto-claim", async (req, res) => {
+  try {
+    const { address, activities } = req.body;
+    
+    if (!address || !bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Valid EKH address required' });
+    }
+
+    const claimedRewards = [];
+    
+    for (const activity of activities) {
+      try {
+        const response = await fetch(`${req.protocol}://${req.get('host')}/api/rewards/claim`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ address, activity })
+        });
+
+// Smart Contract endpoints
+app.post("/api/contracts/deploy", async (req, res) => {
+  try {
+    const { code, creator, initialData } = req.body;
+    
+    if (!code || !creator) {
+      return res.status(400).json({ error: 'Code and creator required' });
+    }
+    
+    if (!bitcoin.isValidAddress(creator)) {
+      return res.status(400).json({ error: 'Invalid creator address' });
+    }
+    
+    const contract = bitcoin.createContract(code, creator, initialData || {});
+    
+    res.json({
+      success: true,
+      contract: {
+        id: contract.id,
+        creator: contract.creator,
+        created: contract.created
+      },
+      message: 'Contract deployed successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Contract deployment failed', message: error.message });
+  }
+});
+
+app.post("/api/contracts/execute", async (req, res) => {
+  try {
+    const { contractId, method, params, caller, value } = req.body;
+    
+    if (!contractId || !method || !caller) {
+      return res.status(400).json({ error: 'Contract ID, method, and caller required' });
+    }
+    
+    if (!bitcoin.isValidAddress(caller)) {
+      return res.status(400).json({ error: 'Invalid caller address' });
+    }
+    
+    const result = bitcoin.executeContract(contractId, method, params || [], caller, value || 0);
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Contract execution failed', message: error.message });
+  }
+});
+
+app.get("/api/contracts/:contractId", (req, res) => {
+  try {
+    const contract = bitcoin.getContract(req.params.contractId);
+    
+    if (!contract) {
+      return res.status(404).json({ error: 'Contract not found' });
+    }
+    
+    res.json({ contract });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get contract', message: error.message });
+  }
+});
+
+app.get("/api/contracts/:contractId/events", (req, res) => {
+  try {
+    const { eventName } = req.query;
+    const events = bitcoin.getContractEvents(req.params.contractId, eventName);
+    
+    res.json({ events });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get contract events', message: error.message });
+  }
+});
+
+// Example contract templates
+app.get("/api/contracts/templates", (req, res) => {
+  const templates = {
+    token: `
+      let totalSupply = storage.totalSupply || 1000000;
+      let balances = storage.balances || {};
+      
+      function mint(to, amount) {
+        require(caller === storage.owner, 'Only owner can mint');
+        balances[to] = (balances[to] || 0) + amount;
+        totalSupply += amount;
+        emit('Transfer', { from: 'MINT', to, amount });
+        return true;
+      }
+      
+      function transfer(to, amount) {
+        require(balances[caller] >= amount, 'Insufficient balance');
+        balances[caller] -= amount;
+        balances[to] = (balances[to] || 0) + amount;
+        emit('Transfer', { from: caller, to, amount });
+        return true;
+      }
+      
+      function balanceOf(address) {
+        return balances[address] || 0;
+      }
+      
+      // Update storage
+      storage.totalSupply = totalSupply;
+      storage.balances = balances;
+    `,
+    
+    lottery: `
+      let tickets = storage.tickets || [];
+      let prize = storage.prize || 0;
+      let ticketPrice = storage.ticketPrice || 10;
+      
+      function buyTicket() {
+        require(value >= ticketPrice, 'Insufficient payment');
+        tickets.push(caller);
+        prize += value;
+        emit('TicketPurchased', { buyer: caller, ticketNumber: tickets.length });
+        return tickets.length;
+      }
+      
+      function drawWinner() {
+        require(caller === storage.owner, 'Only owner can draw');
+        require(tickets.length > 0, 'No tickets sold');
+        
+        const winnerIndex = Math.floor(Math.random() * tickets.length);
+        const winner = tickets[winnerIndex];
+        
+        transfer(winner, prize);
+        emit('WinnerDrawn', { winner, prize });
+        
+        // Reset lottery
+        tickets = [];
+        prize = 0;
+        return winner;
+      }
+      
+      function getTicketCount() {
+        return tickets.length;
+      }
+      
+      function getPrize() {
+        return prize;
+      }
+      
+      // Update storage
+      storage.tickets = tickets;
+      storage.prize = prize;
+    `
+  };
+  
+  res.json({ templates });
+});
+
+
+        
+        if (response.ok) {
+          const result = await response.json();
+          claimedRewards.push(result);
+        }
+      } catch (error) {
+        console.log(`Failed to claim ${activity}:`, error.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      claimed: claimedRewards,
+      totalAmount: claimedRewards.reduce((sum, r) => sum + r.amount, 0)
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Auto-claim failed', message: error.message });
+  }
+});
+
+
+
 app.post("/mining/stop", (req, res) => {
   try {
     bitcoin.autoMining = false;
@@ -668,7 +943,7 @@ app.get("/dashboard", (req, res) => {
   res.sendFile("./dashboard/index.html", { root: __dirname });
 });
 
-app.get("/api/dashboard/data", (req, res) => {
+app.get("/api/dashboard/data", async (req, res) => {
   try {
     // Ensure blockchain is ready
     if (!bitcoin.chain || bitcoin.chain.length === 0) {

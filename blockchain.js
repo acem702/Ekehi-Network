@@ -44,6 +44,10 @@ class Blockchain {
 
     // Initialize LevelDB
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
+    
+    // Initialize contract system
+    this.initializeContractSystem();
+    
     this.initializeBlockchain();
   }
 
@@ -283,19 +287,22 @@ class Blockchain {
   }
 
   createNewTransaction(amount, sender, recipient, fee = 0) {
-    // Enforce minimum fee
-    const actualFee = Math.max(parseFloat(fee) || this.minTransactionFee, this.minTransactionFee);
+    // Enforce minimum fee - don't auto-adjust, validate as provided
+    const actualFee = parseFloat(fee) || 0;
     
     // Enhanced validation
     if (!this.isValidTransaction(amount, sender, recipient, actualFee)) {
       throw new Error('Invalid transaction');
     }
 
+    // Apply minimum fee after validation
+    const finalFee = Math.max(actualFee, this.minTransactionFee);
+
     const newTransaction = {
       amount: parseFloat(amount),
       sender,
       recipient,
-      fee: actualFee,
+      fee: finalFee,
       transactionId: uuidv4().split('-').join(''),
       timestamp: Date.now(),
       network: this.networkName
@@ -311,16 +318,16 @@ class Blockchain {
     if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
     
-    // Enforce minimum fee requirement
-    const requiredFee = parseFloat(fee) || this.minTransactionFee;
-    if (requiredFee < this.minTransactionFee) {
-      throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}`);
+    // Enforce minimum fee requirement - must be exactly what's provided, not defaulted
+    const actualFee = parseFloat(fee) || 0;
+    if (actualFee < this.minTransactionFee) {
+      throw new Error(`Minimum transaction fee is ${this.minTransactionFee} ${this.tokenSymbol}. Provided: ${actualFee}`);
     }
 
     // Check sender balance (except for mining rewards, faucet, and ecosystem)
     if (sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') {
       const senderData = this.getAddressData(sender);
-      const totalAmount = parseFloat(amount) + requiredFee;
+      const totalAmount = parseFloat(amount) + actualFee;
       if (senderData.addressBalance < totalAmount) {
         throw new Error(`Insufficient balance. Required: ${totalAmount} ${this.tokenSymbol}, Available: ${senderData.addressBalance} ${this.tokenSymbol}`);
       }
@@ -794,6 +801,149 @@ class Blockchain {
       this.discoveryInterval = null;
       console.log('Peer discovery stopped');
     }
+
+  // Smart Contract System
+  initializeContractSystem() {
+    this.contracts = new Map();
+    this.contractStorage = new Map();
+    this.contractEvents = [];
+  }
+
+  createContract(contractCode, creator, initialData = {}) {
+    const contractId = uuidv4().split('-').join('');
+    const contract = {
+      id: contractId,
+      code: contractCode,
+      creator,
+      created: Date.now(),
+      state: 'active',
+      storage: initialData,
+      balance: 0,
+      network: this.networkName
+    };
+
+    this.contracts.set(contractId, contract);
+    this.contractStorage.set(contractId, initialData);
+
+    return contract;
+  }
+
+  executeContract(contractId, method, params, caller, value = 0) {
+    const contract = this.contracts.get(contractId);
+    if (!contract || contract.state !== 'active') {
+      throw new Error('Contract not found or inactive');
+    }
+
+    try {
+      // Simple contract execution environment
+      const contractContext = {
+        contractId,
+        caller,
+        value,
+        timestamp: Date.now(),
+        blockNumber: this.chain.length,
+        storage: this.contractStorage.get(contractId) || {},
+        balance: contract.balance,
+        
+        // Contract functions
+        transfer: (to, amount) => {
+          if (contract.balance < amount) {
+            throw new Error('Insufficient contract balance');
+          }
+          
+          const tx = this.createNewTransaction(amount, `CONTRACT:${contractId}`, to);
+          this.addTransactionToPendingTransactions(tx);
+          contract.balance -= amount;
+          return tx.transactionId;
+        },
+        
+        emit: (eventName, data) => {
+          this.contractEvents.push({
+            contract: contractId,
+            event: eventName,
+            data,
+            timestamp: Date.now(),
+            block: this.chain.length
+          });
+        },
+        
+        require: (condition, message) => {
+          if (!condition) {
+            throw new Error(message || 'Contract requirement failed');
+          }
+        }
+      };
+
+      // Execute contract method
+      const result = this.executeContractMethod(contract.code, method, params, contractContext);
+      
+      // Update contract storage
+      this.contractStorage.set(contractId, contractContext.storage);
+      contract.balance = contractContext.balance;
+
+      return {
+        success: true,
+        result,
+        gasUsed: this.calculateGasUsed(method, params),
+        events: this.contractEvents.filter(e => e.contract === contractId)
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  executeContractMethod(contractCode, method, params, context) {
+    // Simple contract method execution
+    // In a real implementation, this would use a proper VM
+    try {
+      const contractFunction = new Function('context', 'method', 'params', `
+        with(context) {
+          ${contractCode}
+          if (typeof ${method} === 'function') {
+            return ${method}(...params);
+          } else {
+            throw new Error('Method not found: ${method}');
+          }
+        }
+      `);
+      
+      return contractFunction(context, method, params);
+    } catch (error) {
+      throw new Error(`Contract execution failed: ${error.message}`);
+    }
+  }
+
+  calculateGasUsed(method, params) {
+    // Simple gas calculation
+    const baseGas = 21000;
+    const methodGas = method.length * 100;
+    const paramsGas = JSON.stringify(params).length * 10;
+    return baseGas + methodGas + paramsGas;
+  }
+
+  getContract(contractId) {
+    const contract = this.contracts.get(contractId);
+    if (!contract) return null;
+
+    return {
+      ...contract,
+      storage: this.contractStorage.get(contractId),
+      events: this.contractEvents.filter(e => e.contract === contractId)
+    };
+  }
+
+  getContractEvents(contractId, eventName = null) {
+    let events = this.contractEvents.filter(e => e.contract === contractId);
+    if (eventName) {
+      events = events.filter(e => e.event === eventName);
+    }
+    return events;
+  }
+
+
   }
 
   async discoverPeers() {
