@@ -4,6 +4,8 @@ import Blockchain from "./blockchain.js";
 import { v4 as uuidv4 } from 'uuid';
 import rp from "request-promise";
 import path from "path";
+import fs from "fs";
+
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
