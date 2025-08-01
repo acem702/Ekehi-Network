@@ -666,12 +666,42 @@ class Blockchain {
 
   // Utility methods for wallet functionality
   createWallet() {
-    const address = this.generateWalletAddress();
+    const privateKey = crypto.randomBytes(32).toString('hex');
+    const address = this.generateWalletAddressFromPrivateKey(privateKey);
     return {
       address,
+      privateKey,
       balance: 0,
-      network: this.networkName
+      network: this.networkName,
+      created: Date.now()
     };
+  }
+
+  generateWalletAddressFromPrivateKey(privateKey) {
+    const keyHash = crypto.createHash('sha256').update(privateKey, 'hex').digest();
+    const publicKey = keyHash.slice(0, 20);
+    const checksum = crypto.createHash('sha256').update(publicKey).digest().slice(0, 4);
+    const addressBytes = Buffer.concat([publicKey, checksum]);
+    return 'EKH' + addressBytes.toString('hex').toUpperCase();
+  }
+
+  recoverWalletFromPrivateKey(privateKey) {
+    try {
+      if (!privateKey || privateKey.length !== 64) {
+        throw new Error('Invalid private key format');
+      }
+      const address = this.generateWalletAddressFromPrivateKey(privateKey);
+      const addressData = this.getAddressData(address);
+      return {
+        address,
+        privateKey,
+        balance: addressData.addressBalance,
+        network: this.networkName,
+        recovered: Date.now()
+      };
+    } catch (error) {
+      throw new Error('Failed to recover wallet: ' + error.message);
+    }
   }
 
   getNetworkInfo() {

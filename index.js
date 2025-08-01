@@ -32,6 +32,59 @@ app.get("/block-explorer", (req, res) => {
   res.sendFile("./block-explorer/index.html", { root: __dirname });
 });
 
+// Block explorer data endpoint
+app.get("/api/explorer/data", (req, res) => {
+  try {
+    const recentBlocks = bitcoin.chain.slice(-20).reverse();
+    const allTransactions = [];
+    
+    bitcoin.chain.forEach(block => {
+      block.transactions.forEach(tx => {
+        allTransactions.push({
+          ...tx,
+          blockIndex: block.index,
+          blockHash: block.hash,
+          blockTimestamp: block.timestamp
+        });
+      });
+    });
+    
+    const recentTransactions = allTransactions.slice(-50).reverse();
+    
+    res.json({
+      blocks: recentBlocks.map(block => ({
+        index: block.index,
+        hash: block.hash,
+        timestamp: block.timestamp,
+        transactions: block.transactions.length,
+        difficulty: block.difficulty,
+        nonce: block.nonce,
+        previousBlockHash: block.previousBlockHash
+      })),
+      transactions: recentTransactions.map(tx => ({
+        transactionId: tx.transactionId,
+        amount: tx.amount,
+        sender: tx.sender,
+        recipient: tx.recipient,
+        timestamp: tx.timestamp || tx.blockTimestamp,
+        fee: tx.fee || 0,
+        blockIndex: tx.blockIndex
+      })),
+      stats: bitcoin.getStats(),
+      isReady: true
+    });
+  } catch (error) {
+    console.error('Explorer data error:', error);
+    res.json({
+      blocks: [],
+      transactions: [],
+      stats: { totalBlocks: 0, totalTransactions: 0 },
+      isReady: false,
+      error: error.message
+    });
+  }
+});
+
 app.get("/blockchain", (req, res) => {
   // Send clean blockchain data without circular references
   const cleanBlockchain = {
@@ -370,6 +423,34 @@ app.get("/wallet/validate/:address", (req, res) => {
   });
 });
 
+// Ecosystem page
+app.get("/ecosystem", (req, res) => {
+  res.sendFile("./ecosystem/index.html", { root: __dirname });
+});
+
+// Wallet recovery endpoint
+app.post("/api/wallet/recover", (req, res) => {
+  try {
+    const { privateKey } = req.body;
+    
+    if (!privateKey) {
+      return res.status(400).json({ error: 'Private key is required' });
+    }
+    
+    const wallet = bitcoin.recoverWalletFromPrivateKey(privateKey);
+    res.json({
+      success: true,
+      wallet,
+      message: 'Wallet recovered successfully'
+    });
+  } catch (error) {
+    res.status(400).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
 // Network info endpoint
 app.get("/network", (req, res) => {
   res.json(bitcoin.getNetworkInfo());
@@ -496,7 +577,7 @@ app.get("/api/dashboard/data", (req, res) => {
       metrics: bitcoin.getNodeMetrics(),
       recentBlocks: recentBlocks.map(block => ({
         index: block.index,
-        hash: block.hash ? (block.hash.substring(0, 16) + '...') : 'Genesis',
+        hash: block.hash && block.hash !== '0' ? (block.hash.substring(0, 16) + '...') : 'Genesis',
         fullHash: block.hash,
         timestamp: block.timestamp,
         transactions: block.transactions ? block.transactions.length : 0,
@@ -521,10 +602,16 @@ app.get("/api/dashboard/data", (req, res) => {
     res.json(dashboardData);
   } catch (error) {
     console.error('Dashboard data error:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch dashboard data', 
-      message: error.message,
-      isReady: false
+    res.json({ 
+      network: { name: bitcoin.networkName, token: { name: bitcoin.tokenName, symbol: bitcoin.tokenSymbol } },
+      stats: { totalBlocks: bitcoin.chain.length, totalSupply: 0, networkNodes: 0, pendingTransactions: 0 },
+      metrics: { uptime: 0, hashRate: 0 },
+      recentBlocks: [],
+      recentTransactions: [],
+      networkNodes: 0,
+      lastUpdate: Date.now(),
+      mempoolSize: 0,
+      isReady: true
     });
   }
 });
