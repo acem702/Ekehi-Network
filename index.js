@@ -480,29 +480,42 @@ app.get("/api/dashboard/data", (req, res) => {
     const recentBlocks = bitcoin.chain.slice(-10);
     const recentTransactions = bitcoin.pendingTransactions.slice(-20);
     
-    res.json({
+    const dashboardData = {
       network: bitcoin.getNetworkInfo(),
       stats: bitcoin.getStats(),
       metrics: bitcoin.getNodeMetrics(),
       recentBlocks: recentBlocks.map(block => ({
         index: block.index,
-        hash: block.hash.substring(0, 16) + '...',
+        hash: block.hash ? (block.hash.substring(0, 16) + '...') : 'Genesis',
+        fullHash: block.hash,
         timestamp: block.timestamp,
-        transactions: block.transactions.length,
-        difficulty: block.difficulty
+        transactions: block.transactions ? block.transactions.length : 0,
+        difficulty: block.difficulty || bitcoin.difficulty,
+        nonce: block.nonce
       })),
       recentTransactions: recentTransactions.map(tx => ({
-        id: tx.transactionId.substring(0, 16) + '...',
-        amount: tx.amount,
-        sender: tx.sender.substring(0, 16) + '...',
-        recipient: tx.recipient.substring(0, 16) + '...',
-        timestamp: tx.timestamp
+        id: tx.transactionId ? (tx.transactionId.substring(0, 16) + '...') : 'N/A',
+        fullId: tx.transactionId,
+        amount: tx.amount || 0,
+        sender: tx.sender && tx.sender.length > 16 ? (tx.sender.substring(0, 16) + '...') : tx.sender,
+        recipient: tx.recipient && tx.recipient.length > 16 ? (tx.recipient.substring(0, 16) + '...') : tx.recipient,
+        timestamp: tx.timestamp || Date.now(),
+        fee: tx.fee || 0
       })),
       networkNodes: bitcoin.networkNodes.length,
-      lastUpdate: Date.now()
-    });
+      lastUpdate: Date.now(),
+      mempoolSize: bitcoin.pendingTransactions.length,
+      isReady: true
+    };
+    
+    res.json(dashboardData);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch dashboard data', message: error.message });
+    console.error('Dashboard data error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch dashboard data', 
+      message: error.message,
+      isReady: false
+    });
   }
 });
 
@@ -555,8 +568,12 @@ app.post("/api/faucet/request", async (req, res) => {
   try {
     const { address } = req.body;
     
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ error: 'Address is required' });
+    }
+    
     if (!bitcoin.isValidAddress(address)) {
-      return res.status(400).json({ error: 'Invalid address format' });
+      return res.status(400).json({ error: 'Invalid EKH address format. Address must start with EKH' });
     }
     
     // Check if address already received faucet tokens recently
@@ -567,17 +584,23 @@ app.post("/api/faucet/request", async (req, res) => {
     
     if (recentFaucetTx) {
       return res.status(429).json({ 
-        error: 'Faucet limit reached. Try again in 1 hour.' 
+        error: 'Faucet limit reached. Try again in 1 hour.',
+        nextRequestTime: new Date(recentFaucetTx.timestamp + 3600000).toISOString()
       });
     }
     
     const faucetAmount = 100; // 100 EKH
-    const faucetTransaction = bitcoin.createNewTransaction(
-      faucetAmount,
-      'FAUCET',
-      address,
-      0
-    );
+    
+    // Create faucet transaction with special sender
+    const faucetTransaction = {
+      amount: faucetAmount,
+      sender: 'FAUCET',
+      recipient: address,
+      fee: 0,
+      transactionId: uuidv4().split('-').join(''),
+      timestamp: Date.now(),
+      network: bitcoin.networkName
+    };
     
     await bitcoin.addTransactionToPendingTransactions(faucetTransaction);
     
@@ -585,9 +608,11 @@ app.post("/api/faucet/request", async (req, res) => {
       success: true,
       amount: faucetAmount,
       transaction: faucetTransaction.transactionId,
-      message: `${faucetAmount} ${bitcoin.tokenSymbol} sent to ${address}`
+      message: `${faucetAmount} ${bitcoin.tokenSymbol} sent to ${address}`,
+      estimatedConfirmation: 'Next block (~10 seconds)'
     });
   } catch (error) {
+    console.error('Faucet error:', error);
     res.status(500).json({ error: 'Faucet request failed', message: error.message });
   }
 });

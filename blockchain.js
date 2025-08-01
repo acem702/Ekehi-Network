@@ -292,12 +292,12 @@ class Blockchain {
     if (amount <= 0) return false;
     if (sender === recipient) return false;
     if (!sender || !recipient) return false;
-    if (!this.isValidAddress(sender) && sender !== '00') return false;
+    if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET') return false;
     if (!this.isValidAddress(recipient)) return false;
     if (fee < 0) return false;
 
-    // Check sender balance (except for mining rewards)
-    if (sender !== '00') {
+    // Check sender balance (except for mining rewards and faucet)
+    if (sender !== '00' && sender !== 'FAUCET') {
       const senderData = this.getAddressData(sender);
       const totalAmount = parseFloat(amount) + parseFloat(fee || this.minTransactionFee);
       if (senderData.addressBalance < totalAmount) {
