@@ -2,6 +2,7 @@ import sha256 from 'sha256';
 import { v4 as uuidv4 } from 'uuid';
 import { Level } from 'level';
 import crypto from 'crypto';
+import { ContractSystem } from './contracts.js';
 
 
 const currentNodeUrl = process.argv[3];
@@ -46,7 +47,8 @@ class Blockchain {
     // Initialize LevelDB
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
     
-    
+    // Initialize contract system
+    this.contractSystem = new ContractSystem(this);
     
     this.initializeBlockchain();
   }
@@ -801,6 +803,31 @@ class Blockchain {
       this.discoveryInterval = null;
       console.log('Peer discovery stopped');
     }
+  }
+
+  // Contract system delegate methods
+  deployContract(code, creator, initialData = {}) {
+    return this.contractSystem.deployContract(code, creator, initialData);
+  }
+
+  executeContract(contractId, method, params, caller, value = 0) {
+    return this.contractSystem.executeContract(contractId, method, params, caller, value);
+  }
+
+  getContract(contractId) {
+    return this.contractSystem.getContract(contractId);
+  }
+
+  getAllContracts() {
+    return this.contractSystem.getAllContracts();
+  }
+
+  getContractEvents(contractId, eventName = null) {
+    return this.contractSystem.getContractEvents(contractId, eventName);
+  }
+
+  getContractTemplates() {
+    return this.contractSystem.getTemplates();
   }
 
   async discoverPeers() {
