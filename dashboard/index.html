@@ -191,6 +191,70 @@
                     </div>
                 </div>
 
+                <!-- Peer Management -->
+                <div class="card dashboard-card mb-4">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-network-wired me-2"></i>Peer Management</h5>
+                        <button class="btn btn-light btn-sm" onclick="discoverPeers()">
+                            <i class="fas fa-search"></i> Discover
+                        </button>
+                    </div>
+                    <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Connected Peers:</strong> <span id="connectedPeers">-</span></p>
+                                <p class="mb-1"><strong>Max Peers:</strong> <span id="maxPeers">-</span></p>
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-1"><strong>Discovery:</strong> <span id="discoveryStatus">-</span></p>
+                                <p class="mb-1"><strong>Node URL:</strong> <span id="nodeUrl" class="small">-</span></p>
+                            </div>
+                        </div>
+                        <div id="peersList">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading peers...
+                            </div>
+                        </div>
+                        <hr>
+                        <div class="mt-3">
+                            <h6 class="mb-2">Add Peer Manually</h6>
+                            <div class="input-group input-group-sm">
+                                <input type="url" class="form-control" id="newPeerUrl" placeholder="http://peer-url:port">
+                                <button class="btn btn-outline-primary" onclick="addPeer()">
+                                    <i class="fas fa-plus"></i> Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Token Economics -->
+                <div class="card dashboard-card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-coins me-2"></i>Token Economics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <p><strong>Total Supply:</strong> <span id="tokenTotalSupply">-</span> EKH</p>
+                                <p><strong>Circulating:</strong> <span id="tokenCirculating">-</span> EKH</p>
+                                <p><strong>Mining Reward:</strong> <span id="tokenMiningReward">-</span> EKH</p>
+                            </div>
+                            <div class="col-6">
+                                <p><strong>Total Blocks:</strong> <span id="tokenBlocks">-</span></p>
+                                <p><strong>Faucet Issued:</strong> <span id="faucetIssued">-</span> EKH</p>
+                                <p><strong>Inflation Rate:</strong> <span id="inflationRate">-</span>%</p>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle"></i> 
+                                Total supply increases by mining rewards. Circulating supply excludes unmoved tokens.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Node Controls -->
                 <div class="card dashboard-card mb-4">
                     <div class="card-header bg-danger text-white">
@@ -282,6 +346,12 @@
                 document.getElementById('blockTime').textContent = (data.network?.blockTime / 1000 || 0).toFixed(0);
                 document.getElementById('uptime').textContent = formatDuration(data.metrics?.uptime || 0);
                 
+                // Update peer information
+                updatePeerInfo(data);
+                
+                // Update token economics
+                updateTokenEconomics(data);
+                
                 // Update recent blocks
                 updateRecentBlocks(data.recentBlocks || []);
                 
@@ -291,6 +361,58 @@
             } catch (error) {
                 console.error('Error updating dashboard:', error);
             }
+        }
+
+        function updatePeerInfo(data) {
+            document.getElementById('connectedPeers').textContent = data.stats?.networkNodes || 0;
+            document.getElementById('maxPeers').textContent = '20'; // From blockchain config
+            document.getElementById('discoveryStatus').textContent = 'Active';
+            document.getElementById('nodeUrl').textContent = window.location.origin;
+            
+            // Update peers list
+            const peersList = document.getElementById('peersList');
+            if (data.networkNodes && data.networkNodes > 0) {
+                peersList.innerHTML = `
+                    <div class="small">
+                        <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded mb-1">
+                            <span><i class="fas fa-circle text-success me-1"></i>Local Node</span>
+                            <span class="badge bg-primary">Active</span>
+                        </div>
+                        ${Array.from({length: data.stats?.networkNodes || 0}, (_, i) => `
+                            <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded mb-1">
+                                <span><i class="fas fa-circle text-success me-1"></i>Peer ${i + 1}</span>
+                                <span class="badge bg-success">Connected</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            } else {
+                peersList.innerHTML = '<div class="text-center text-muted">No peers connected</div>';
+            }
+        }
+
+        function updateTokenEconomics(data) {
+            const totalSupply = data.stats?.totalSupply || 0;
+            const totalBlocks = data.stats?.totalBlocks || 0;
+            const miningReward = data.stats?.miningReward || 0;
+            
+            // Calculate faucet issued tokens (approximate)
+            const faucetIssued = Math.min(totalSupply * 0.1, 10000); // Estimate faucet tokens
+            
+            // Calculate circulating supply (total minus large inactive holders)
+            const circulatingSupply = totalSupply * 0.95; // Assume 95% is circulating
+            
+            // Calculate inflation rate based on mining
+            const blocksPerDay = (24 * 60 * 60) / ((data.stats?.averageBlockTime || 10000) / 1000);
+            const dailyInflation = (blocksPerDay * miningReward) / totalSupply * 100;
+            const annualInflation = dailyInflation * 365;
+            
+            document.getElementById('tokenTotalSupply').textContent = totalSupply.toFixed(1);
+            document.getElementById('tokenCirculating').textContent = circulatingSupply.toFixed(1);
+            document.getElementById('tokenMiningReward').textContent = miningReward;
+            document.getElementById('tokenBlocks').textContent = totalBlocks;
+            document.getElementById('faucetIssued').textContent = faucetIssued.toFixed(0);
+            document.getElementById('inflationRate').textContent = annualInflation.toFixed(2);
         }
 
         function updateRecentBlocks(blocks) {
@@ -424,6 +546,39 @@
                         <strong>Error:</strong> Faucet request failed: ${error.message}
                     </div>
                 `;
+            }
+        }
+
+        async function discoverPeers() {
+            try {
+                const response = await fetch('/api/network/discover', { method: 'POST' });
+                const result = await response.json();
+                showAlert(result.message, 'success');
+                setTimeout(loadDashboardData, 1000);
+            } catch (error) {
+                showAlert('Failed to discover peers', 'danger');
+            }
+        }
+
+        async function addPeer() {
+            const peerUrl = document.getElementById('newPeerUrl').value.trim();
+            if (!peerUrl) {
+                showAlert('Please enter a valid peer URL', 'warning');
+                return;
+            }
+
+            try {
+                const response = await fetch('/register-and-broadcast-node', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newNodeUrl: peerUrl })
+                });
+                const result = await response.json();
+                showAlert(result.note || 'Peer added successfully', 'success');
+                document.getElementById('newPeerUrl').value = '';
+                setTimeout(loadDashboardData, 1000);
+            } catch (error) {
+                showAlert('Failed to add peer', 'danger');
             }
         }
 

@@ -33,7 +33,17 @@ app.get("/block-explorer", (req, res) => {
 });
 
 app.get("/blockchain", (req, res) => {
-  res.send(bitcoin);
+  // Send clean blockchain data without circular references
+  const cleanBlockchain = {
+    chain: bitcoin.chain,
+    pendingTransactions: bitcoin.pendingTransactions,
+    difficulty: bitcoin.difficulty,
+    networkName: bitcoin.networkName,
+    tokenName: bitcoin.tokenName,
+    tokenSymbol: bitcoin.tokenSymbol,
+    miningReward: bitcoin.miningReward
+  };
+  res.json(cleanBlockchain);
 });
 
 app.post("/transaction", async (req, res) => {
