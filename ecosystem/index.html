@@ -634,8 +634,9 @@
                         <input type="number" class="form-control" id="amountInput" step="0.001" min="0.001">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Fee (EKH)</label>
-                        <input type="number" class="form-control" id="feeInput" value="0.001" step="0.001" min="0.001">
+                        <label class="form-label">Fee (EKH) <small class="text-muted">Minimum: 0.001 EKH</small></label>
+                        <input type="number" class="form-control" id="feeInput" value="0.001" step="0.001" min="0.001" required>
+                        <div class="form-text">Higher fees may result in faster processing</div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -764,6 +765,9 @@
 
             try {
                 const response = await fetch(`/address/${currentWallet.address}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 const result = await response.json();
 
                 if (result.addressData) {
@@ -774,9 +778,16 @@
                     document.getElementById('userRankBalance').textContent = data.addressBalance.toFixed(3) + ' EKH';
 
                     updateRecentActivity(data.addressTransactions.slice(-5));
+                } else {
+                    // Handle case where no address data is found
+                    document.getElementById('walletBalance').textContent = '0.000';
+                    document.getElementById('walletTxCount').textContent = '0';
+                    document.getElementById('walletEarned').textContent = '0.0';
+                    document.getElementById('userRankBalance').textContent = '0.000 EKH';
                 }
             } catch (error) {
                 console.error('Failed to update wallet:', error);
+                showAlert('Failed to update wallet data', 'warning');
             }
         }
 
@@ -788,20 +799,34 @@
             }
 
             container.innerHTML = transactions.reverse().map(tx => `
-                <div class="transaction-item" onclick="showTransactionDetails('${tx.transactionId}')">
-                    <div class="d-flex justify-content-between">
-                        <span class="fw-bold">${tx.sender === currentWallet.address ? 'Sent' : 'Received'}</span>
-                        <span class="${tx.sender === currentWallet.address ? 'text-danger' : 'text-success'} fw-bold">
-                            ${tx.sender === currentWallet.address ? '-' : '+'}${tx.amount} EKH
-                        </span>
+                <div class="card mb-2" style="cursor: pointer;" onclick="showTransactionDetails('${tx.transactionId}')">
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="fw-bold d-block">${tx.sender === currentWallet.address ? 'Sent' : 'Received'}</span>
+                                <small class="text-muted">${new Date(tx.timestamp).toLocaleString()}</small>
+                            </div>
+                            <div class="text-end">
+                                <span class="${tx.sender === currentWallet.address ? 'text-danger' : 'text-success'} fw-bold">
+                                    ${tx.sender === currentWallet.address ? '-' : '+'}${tx.amount} EKH
+                                </span>
+                                <small class="text-muted d-block">Fee: ${tx.fee || 0} EKH</small>
+                            </div>
+                        </div>
+                        ${tx.sender === 'FAUCET' ? '<span class="badge bg-warning mt-1">Faucet</span>' : ''}
+                        ${tx.sender === 'ECOSYSTEM' ? '<span class="badge bg-info mt-1">Ecosystem</span>' : ''}
+                        ${tx.sender === '00' ? '<span class="badge bg-success mt-1">Mining</span>' : ''}
                     </div>
-                    <small class="text-muted">${new Date(tx.timestamp).toLocaleString()}</small                </div>
+                </div>
             `).join('');
         }
 
         async function loadNetworkStats() {
             try {
                 const response = await fetch('/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
                 const stats = await response.json();
 
                 document.getElementById('networkBlocks').textContent = stats.totalBlocks || 0;
@@ -809,6 +834,10 @@
                 document.getElementById('networkSupply').textContent = Math.floor(stats.totalSupply || 0);
             } catch (error) {
                 console.error('Failed to load stats:', error);
+                // Set default values on error
+                document.getElementById('networkBlocks').textContent = '0';
+                document.getElementById('networkTx').textContent = '0';
+                document.getElementById('networkSupply').textContent = '0';
             }
         }
 
@@ -875,8 +904,18 @@
             const amount = parseFloat(document.getElementById('amountInput').value);
             const fee = parseFloat(document.getElementById('feeInput').value);
 
-            if (!recipient || !amount || !fee) {
-                showAlert('Please fill all fields', 'warning');
+            if (!recipient || !amount || isNaN(amount) || amount <= 0) {
+                showAlert('Please enter a valid recipient and amount', 'warning');
+                return;
+            }
+
+            if (isNaN(fee) || fee < 0.001) {
+                showAlert('Minimum transaction fee is 0.001 EKH', 'warning');
+                return;
+            }
+
+            if (!currentWallet) {
+                showAlert('Please create a wallet first', 'warning');
                 return;
             }
 

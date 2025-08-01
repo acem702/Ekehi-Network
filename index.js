@@ -37,7 +37,7 @@ app.get("/api/explorer/data", (req, res) => {
   try {
     // Ensure blockchain is loaded
     if (!bitcoin.chain || bitcoin.chain.length === 0) {
-      return res.json({
+      return res.status(200).json({
         blocks: [],
         transactions: [],
         stats: { 
@@ -97,7 +97,7 @@ app.get("/api/explorer/data", (req, res) => {
     });
   } catch (error) {
     console.error('Explorer data error:', error);
-    res.json({
+    res.status(200).json({
       blocks: [],
       transactions: [],
       stats: { 
@@ -732,7 +732,7 @@ app.get("/api/dashboard/data", (req, res) => {
     res.json(dashboardData);
   } catch (error) {
     console.error('Dashboard data error:', error);
-    res.json({ 
+    res.status(200).json({ 
       network: { 
         name: bitcoin.networkName || 'Ekehi Network', 
         token: { 
@@ -752,7 +752,8 @@ app.get("/api/dashboard/data", (req, res) => {
       networkNodes: bitcoin.networkNodes ? bitcoin.networkNodes.length : 0,
       lastUpdate: Date.now(),
       mempoolSize: bitcoin.pendingTransactions ? bitcoin.pendingTransactions.length : 0,
-      isReady: true
+      isReady: true,
+      error: error.message
     });
   }
 });
