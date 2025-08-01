@@ -470,13 +470,180 @@ app.get("/richlist", (req, res) => {
   }
 });
 
+// Enhanced dashboard and monitoring endpoints
+app.get("/dashboard", (req, res) => {
+  res.sendFile("./dashboard/index.html", { root: __dirname });
+});
+
+app.get("/api/dashboard/data", (req, res) => {
+  try {
+    const recentBlocks = bitcoin.chain.slice(-10);
+    const recentTransactions = bitcoin.pendingTransactions.slice(-20);
+    
+    res.json({
+      network: bitcoin.getNetworkInfo(),
+      stats: bitcoin.getStats(),
+      metrics: bitcoin.getNodeMetrics(),
+      recentBlocks: recentBlocks.map(block => ({
+        index: block.index,
+        hash: block.hash.substring(0, 16) + '...',
+        timestamp: block.timestamp,
+        transactions: block.transactions.length,
+        difficulty: block.difficulty
+      })),
+      recentTransactions: recentTransactions.map(tx => ({
+        id: tx.transactionId.substring(0, 16) + '...',
+        amount: tx.amount,
+        sender: tx.sender.substring(0, 16) + '...',
+        recipient: tx.recipient.substring(0, 16) + '...',
+        timestamp: tx.timestamp
+      })),
+      networkNodes: bitcoin.networkNodes.length,
+      lastUpdate: Date.now()
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch dashboard data', message: error.message });
+  }
+});
+
+// Node management endpoints
+app.get("/api/node/metrics", (req, res) => {
+  res.json(bitcoin.getNodeMetrics());
+});
+
+app.post("/api/node/restart", (req, res) => {
+  try {
+    bitcoin.stopAllProcesses();
+    setTimeout(() => {
+      bitcoin.startAutoMining();
+      bitcoin.startPeerDiscovery();
+      bitcoin.startMetricsCollection();
+    }, 1000);
+    
+    res.json({ message: 'Node services restarted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to restart node', message: error.message });
+  }
+});
+
+app.get("/api/network/peers", (req, res) => {
+  res.json({
+    peers: bitcoin.networkNodes.map(node => ({
+      url: node,
+      status: 'connected', // In real implementation, ping to check
+      lastSeen: Date.now()
+    })),
+    maxPeers: bitcoin.maxPeers,
+    discoveryEnabled: bitcoin.discoveryInterval !== null
+  });
+});
+
+app.post("/api/network/discover", async (req, res) => {
+  try {
+    await bitcoin.discoverPeers();
+    res.json({ 
+      message: 'Peer discovery initiated',
+      currentPeers: bitcoin.networkNodes.length 
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Peer discovery failed', message: error.message });
+  }
+});
+
+// Testnet faucet endpoint
+app.post("/api/faucet/request", async (req, res) => {
+  try {
+    const { address } = req.body;
+    
+    if (!bitcoin.isValidAddress(address)) {
+      return res.status(400).json({ error: 'Invalid address format' });
+    }
+    
+    // Check if address already received faucet tokens recently
+    const addressData = bitcoin.getAddressData(address);
+    const recentFaucetTx = addressData.addressTransactions.find(tx => 
+      tx.sender === 'FAUCET' && (Date.now() - tx.timestamp) < 3600000 // 1 hour
+    );
+    
+    if (recentFaucetTx) {
+      return res.status(429).json({ 
+        error: 'Faucet limit reached. Try again in 1 hour.' 
+      });
+    }
+    
+    const faucetAmount = 100; // 100 EKH
+    const faucetTransaction = bitcoin.createNewTransaction(
+      faucetAmount,
+      'FAUCET',
+      address,
+      0
+    );
+    
+    await bitcoin.addTransactionToPendingTransactions(faucetTransaction);
+    
+    res.json({
+      success: true,
+      amount: faucetAmount,
+      transaction: faucetTransaction.transactionId,
+      message: `${faucetAmount} ${bitcoin.tokenSymbol} sent to ${address}`
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Faucet request failed', message: error.message });
+  }
+});
+
+// API documentation endpoint
+app.get("/api/docs", (req, res) => {
+  res.json({
+    name: "Ekehi Network Testnet API",
+    version: "1.0.0-testnet",
+    endpoints: {
+      blockchain: {
+        "GET /": "Welcome message",
+        "GET /blockchain": "Get full blockchain",
+        "GET /stats": "Blockchain statistics",
+        "GET /network": "Network information"
+      },
+      wallet: {
+        "GET /wallet/create": "Create new wallet",
+        "GET /wallet/validate/:address": "Validate address",
+        "GET /address/:address": "Get address data"
+      },
+      transactions: {
+        "POST /transaction/send": "Send transaction",
+        "GET /transaction/:id": "Get transaction",
+        "GET /mempool": "View pending transactions"
+      },
+      mining: {
+        "POST /mining/start": "Start auto-mining",
+        "POST /mining/stop": "Stop auto-mining",
+        "GET /mining/status": "Mining status"
+      },
+      testnet: {
+        "POST /api/faucet/request": "Request testnet tokens",
+        "GET /api/dashboard/data": "Dashboard data",
+        "GET /api/node/metrics": "Node metrics"
+      }
+    }
+  });
+});
+
 app.listen(port, '0.0.0.0', () => {
-  console.log(`=== ${bitcoin.networkName} Node ===`);
-  console.log(`Express is listening on port ${port}...`);  
-  console.log(`Blockchain initialized with ${bitcoin.chain.length} blocks`);
-  console.log(`Token: ${bitcoin.tokenName} (${bitcoin.tokenSymbol})`);
-  console.log(`Node URL: ${bitcoin.currentNodeUrl}`);
-  console.log(`Miner Address: ${bitcoin.minerAddress}`);
-  console.log(`Auto-mining: ${bitcoin.autoMining ? 'ENABLED' : 'DISABLED'}`);
+  console.log('🚀 ===================================');
+  console.log(`🌐 ${bitcoin.networkName} TESTNET LAUNCHED`);
+  console.log('🚀 ===================================');
+  console.log(`📡 Server: http://0.0.0.0:${port}`);  
+  console.log(`📊 Dashboard: http://0.0.0.0:${port}/dashboard`);
+  console.log(`🔍 Explorer: http://0.0.0.0:${port}/block-explorer`);
+  console.log(`📖 API Docs: http://0.0.0.0:${port}/api/docs`);
+  console.log('');
+  console.log(`⛏️  Auto-mining: ${bitcoin.autoMining ? '✅ ACTIVE' : '❌ DISABLED'}`);
+  console.log(`🔗 Peer discovery: ✅ ACTIVE`);
+  console.log(`💰 Faucet: ✅ AVAILABLE`);
+  console.log(`🪙 Token: ${bitcoin.tokenName} (${bitcoin.tokenSymbol})`);
+  console.log(`📦 Blocks: ${bitcoin.chain.length}`);
+  console.log(`🏠 Miner: ${bitcoin.minerAddress}`);
+  console.log('');
+  console.log('🎉 TESTNET READY FOR USERS!');
   console.log('=====================================');
 });
