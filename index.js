@@ -336,8 +336,147 @@ app.get("/stats", (req, res) => {
   res.json(bitcoin.getStats());
 });
 
+// Wallet endpoints
+app.get("/wallet/create", (req, res) => {
+  try {
+    const wallet = bitcoin.createWallet();
+    res.json({
+      success: true,
+      wallet,
+      message: `New ${bitcoin.tokenSymbol} wallet created successfully`
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Wallet creation failed', message: error.message });
+  }
+});
+
+app.get("/wallet/validate/:address", (req, res) => {
+  const address = req.params.address;
+  const isValid = bitcoin.isValidAddress(address);
+  res.json({
+    address,
+    valid: isValid,
+    network: bitcoin.networkName
+  });
+});
+
+// Network info endpoint
+app.get("/network", (req, res) => {
+  res.json(bitcoin.getNetworkInfo());
+});
+
+// Mining control endpoints
+app.post("/mining/start", (req, res) => {
+  try {
+    if (!bitcoin.autoMining) {
+      bitcoin.autoMining = true;
+      bitcoin.startAutoMining();
+      res.json({ message: 'Auto-mining started', status: 'active' });
+    } else {
+      res.json({ message: 'Auto-mining already active', status: 'active' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to start mining', message: error.message });
+  }
+});
+
+app.post("/mining/stop", (req, res) => {
+  try {
+    bitcoin.autoMining = false;
+    bitcoin.stopAutoMining();
+    res.json({ message: 'Auto-mining stopped', status: 'stopped' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to stop mining', message: error.message });
+  }
+});
+
+app.get("/mining/status", (req, res) => {
+  res.json({
+    autoMining: bitcoin.autoMining,
+    isMining: bitcoin.isMining,
+    minerAddress: bitcoin.minerAddress,
+    pendingTransactions: bitcoin.pendingTransactions.length,
+    difficulty: bitcoin.difficulty
+  });
+});
+
+// Enhanced transaction endpoint with fee support
+app.post("/transaction/send", async (req, res) => {
+  try {
+    const { amount, sender, recipient, fee } = req.body;
+    
+    if (!bitcoin.isValidAddress(sender) || !bitcoin.isValidAddress(recipient)) {
+      return res.status(400).json({ error: 'Invalid wallet address format' });
+    }
+    
+    if (!amount || !sender || !recipient) {
+      return res.status(400).json({ error: 'Amount, sender, and recipient are required' });
+    }
+    
+    const newTransaction = bitcoin.createNewTransaction(amount, sender, recipient, fee);
+    const blockIndex = await bitcoin.addTransactionToPendingTransactions(newTransaction);
+    
+    res.json({
+      success: true,
+      transaction: newTransaction,
+      note: `Transaction will be added in block ${blockIndex}`,
+      estimatedConfirmation: 'Next block (~10 seconds)'
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Mempool endpoint
+app.get("/mempool", (req, res) => {
+  res.json({
+    pendingTransactions: bitcoin.pendingTransactions,
+    count: bitcoin.pendingTransactions.length,
+    totalValue: bitcoin.pendingTransactions.reduce((total, tx) => total + tx.amount, 0),
+    totalFees: bitcoin.pendingTransactions.reduce((total, tx) => total + (tx.fee || 0), 0)
+  });
+});
+
+// Rich list endpoint (top addresses by balance)
+app.get("/richlist", (req, res) => {
+  try {
+    const addresses = new Set();
+    
+    // Collect all addresses
+    bitcoin.chain.forEach(block => {
+      block.transactions.forEach(tx => {
+        if (tx.sender !== '00') addresses.add(tx.sender);
+        addresses.add(tx.recipient);
+      });
+    });
+    
+    // Calculate balances and sort
+    const addressBalances = Array.from(addresses)
+      .map(address => ({
+        address,
+        ...bitcoin.getAddressData(address)
+      }))
+      .filter(data => data.addressBalance > 0)
+      .sort((a, b) => b.addressBalance - a.addressBalance)
+      .slice(0, 50); // Top 50
+    
+    res.json({
+      richList: addressBalances,
+      totalAddresses: addresses.size,
+      token: bitcoin.tokenSymbol
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to generate rich list', message: error.message });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Express is listening on port ${port}...`);
+  console.log(`=== ${bitcoin.networkName} Node ===`);
+  console.log(`Express is listening on port ${port}...`);  
   console.log(`Blockchain initialized with ${bitcoin.chain.length} blocks`);
+  console.log(`Token: ${bitcoin.tokenName} (${bitcoin.tokenSymbol})`);
   console.log(`Node URL: ${bitcoin.currentNodeUrl}`);
+  console.log(`Miner Address: ${bitcoin.minerAddress}`);
+  console.log(`Auto-mining: ${bitcoin.autoMining ? 'ENABLED' : 'DISABLED'}`);
+  console.log('=====================================');
 });
