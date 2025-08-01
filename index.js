@@ -913,16 +913,63 @@ app.get("/api/network/peers", (req, res) => {
       lastSeen: Date.now()
     })),
     maxPeers: bitcoin.maxPeers,
-    discoveryEnabled: bitcoin.discoveryInterval !== null
+    discoveryEnabled: bitcoin.discoveryInterval !== null,
+    currentNodeUrl: bitcoin.currentNodeUrl,
+    discoverySeeds: bitcoin.discoverySeeds
   });
+});
+
+// Manual peer connection endpoint
+app.post("/api/network/connect-peer", async (req, res) => {
+  try {
+    const { peerUrl } = req.body;
+    
+    if (!peerUrl) {
+      return res.status(400).json({ error: 'Peer URL is required' });
+    }
+
+    // Try to register with the peer
+    const requestOptions = {
+      uri: peerUrl + "/register-and-broadcast-node",
+      method: "POST",
+      body: { newNodeUrl: bitcoin.currentNodeUrl },
+      json: true,
+      timeout: 10000
+    };
+
+    await rp(requestOptions);
+    
+    // Add peer to our list if not already there
+    if (bitcoin.networkNodes.indexOf(peerUrl) === -1) {
+      bitcoin.networkNodes.push(peerUrl);
+      await bitcoin.saveToDatabase();
+    }
+
+    // Try to sync blockchain
+    await bitcoin.syncWithPeers();
+
+    res.json({
+      success: true,
+      message: `Connected to peer: ${peerUrl}`,
+      totalPeers: bitcoin.networkNodes.length,
+      localBlocks: bitcoin.chain.length
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to connect to peer', 
+      message: error.message 
+    });
+  }
 });
 
 app.post("/api/network/discover", async (req, res) => {
   try {
-    await bitcoin.discoverPeers();
+    const result = await bitcoin.discoverPeers();
     res.json({ 
-      message: 'Peer discovery initiated',
-      currentPeers: bitcoin.networkNodes.length 
+      message: 'Peer discovery completed',
+      discovered: result.discovered,
+      totalPeers: result.total,
+      peers: bitcoin.networkNodes
     });
   } catch (error) {
     res.status(500).json({ error: 'Peer discovery failed', message: error.message });
@@ -1189,6 +1236,48 @@ if (!fs.existsSync(contractsDir)){
     }
 }
 
+// Debug endpoints for peer troubleshooting
+app.get("/api/debug/peers", (req, res) => {
+  res.json({
+    currentNodeUrl: bitcoin.currentNodeUrl,
+    networkNodes: bitcoin.networkNodes,
+    discoverySeeds: bitcoin.discoverySeeds,
+    peerCount: bitcoin.networkNodes.length,
+    lastDiscovery: new Date().toISOString(),
+    chainLength: bitcoin.chain.length,
+    pendingTransactions: bitcoin.pendingTransactions.length
+  });
+});
+
+app.post("/api/debug/force-sync", async (req, res) => {
+  try {
+    console.log('🔧 Manual sync triggered...');
+    const result = await bitcoin.syncWithPeers();
+    res.json({
+      success: true,
+      result,
+      networkNodes: bitcoin.networkNodes,
+      chainLength: bitcoin.chain.length
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/debug/force-discovery", async (req, res) => {
+  try {
+    console.log('🔧 Manual peer discovery triggered...');
+    const result = await bitcoin.discoverPeers();
+    res.json({
+      success: true,
+      result,
+      networkNodes: bitcoin.networkNodes
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
   console.log('🚀 ===================================');
   console.log(`🌐 ${bitcoin.networkName} TESTNET LAUNCHED`);
@@ -1197,6 +1286,7 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`📊 Dashboard: http://0.0.0.0:${port}/dashboard`);
   console.log(`🔍 Explorer: http://0.0.0.0:${port}/block-explorer`);
   console.log(`📖 API Docs: http://0.0.0.0:${port}/api/docs`);
+  console.log(`🔧 Debug: http://0.0.0.0:${port}/api/debug/peers`);
   console.log('');
   console.log(`⛏️  Auto-mining: ${bitcoin.autoMining ? '✅ ACTIVE' : '❌ DISABLED'}`);
   console.log(`🔗 Peer discovery: ✅ ACTIVE`);
@@ -1204,6 +1294,7 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`🪙 Token: ${bitcoin.tokenName} (${bitcoin.tokenSymbol})`);
   console.log(`📦 Blocks: ${bitcoin.chain.length}`);
   console.log(`🏠 Miner: ${bitcoin.minerAddress}`);
+  console.log(`🌐 Node URL: ${bitcoin.currentNodeUrl || 'Not set'}`);
   console.log('');
   console.log('🎉 TESTNET READY FOR USERS!');
   console.log('=====================================');

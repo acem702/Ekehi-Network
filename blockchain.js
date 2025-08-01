@@ -28,10 +28,11 @@ class Blockchain {
     this.isMining = false;
     this.minerAddress = this.generateWalletAddress();
 
-    // Peer discovery configuration
+    // Peer discovery configuration - update these with your actual node URLs
     this.discoverySeeds = [
-      'https://ekehi-network.onrender.com',
-      'https://664688a8-8264-45f8-8143-ed7bf94ca882-00-19vgtswsexh1s.worf.replit.dev'
+      // Add your actual Replit URLs here when you have multiple instances
+      // Example: 'https://blockchain-node-2.your-username.repl.co',
+      // Example: 'https://blockchain-node-3.your-username.repl.co'
     ];
     this.maxPeers = 20;
     this.discoveryInterval = null;
@@ -188,16 +189,44 @@ class Blockchain {
   }
 
   async broadcastNewBlock(newBlock) {
+    if (this.networkNodes.length === 0) {
+      console.log(`📢 No peers to broadcast to`);
+      return;
+    }
+
+    console.log(`📢 Broadcasting new block to ${this.networkNodes.length} peers...`);
+    
+    // Import request-promise
+    let rp;
+    try {
+      rp = (await import('request-promise')).default;
+    } catch (importError) {
+      console.error('❌ Failed to import request-promise for broadcast:', importError.message);
+      return;
+    }
+
     const broadcastPromises = this.networkNodes.map(async (nodeUrl) => {
       try {
-        // In a real implementation, you'd use HTTP requests here
-        console.log(`Broadcasting block to ${nodeUrl}`);
+        const requestOptions = {
+          uri: nodeUrl + "/receive-new-block",
+          method: "POST",
+          body: { newBlock },
+          json: true,
+          timeout: 10000
+        };
+
+        const response = await rp(requestOptions);
+        console.log(`✅ Block broadcast to ${nodeUrl}: ${response.note}`);
+        return { success: true, nodeUrl, response };
       } catch (error) {
-        console.error(`Failed to broadcast to ${nodeUrl}:`, error.message);
+        console.error(`❌ Failed to broadcast to ${nodeUrl}:`, error.message);
+        return { success: false, nodeUrl, error: error.message };
       }
     });
 
-    await Promise.allSettled(broadcastPromises);
+    const results = await Promise.allSettled(broadcastPromises);
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    console.log(`📊 Block broadcast completed: ${successful}/${this.networkNodes.length} successful`);
   }
 
   async loadFromDatabase() {
@@ -801,9 +830,16 @@ class Blockchain {
   // Peer discovery functionality
   async startPeerDiscovery() {
     console.log('Starting peer discovery...');
+    
+    // Initial discovery
+    setTimeout(async () => {
+      await this.discoverPeers();
+    }, 5000); // Initial discovery after 5 seconds
+    
+    // Regular discovery
     this.discoveryInterval = setInterval(async () => {
       await this.discoverPeers();
-    }, 30000); // Discover peers every 30 seconds
+    }, 60000); // Discover peers every 60 seconds
   }
 
   stopPeerDiscovery() {
@@ -841,19 +877,177 @@ class Blockchain {
 
   async discoverPeers() {
     try {
-      // Simulate peer discovery (in real implementation, would contact seed nodes)
-      console.log(`Peer discovery: ${this.networkNodes.length} peers connected`);
+      console.log(`🔍 Starting peer discovery from ${this.discoverySeeds.length} seed nodes...`);
+      console.log(`📍 Current node URL: ${this.currentNodeUrl}`);
+      console.log(`📋 Discovery seeds:`, this.discoverySeeds);
       
+      let discovered = 0;
+
+      // Import request-promise at the top level
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        console.error('❌ Failed to import request-promise:', importError.message);
+        return { discovered: 0, total: this.networkNodes.length };
+      }
+
+      // Try to connect to discovery seeds
+      for (const seedUrl of this.discoverySeeds) {
+        if (seedUrl === this.currentNodeUrl) {
+          console.log(`⏭️ Skipping self: ${seedUrl}`);
+          continue;
+        }
+        
+        console.log(`🔗 Attempting to connect to seed: ${seedUrl}`);
+        
+        try {
+          // First, try to register with the seed node
+          const registerOptions = {
+            uri: seedUrl + "/register-and-broadcast-node",
+            method: "POST",
+            body: { newNodeUrl: this.currentNodeUrl },
+            json: true,
+            timeout: 15000,
+            resolveWithFullResponse: false
+          };
+
+          console.log(`📤 Registering with ${seedUrl}...`);
+          const registerResponse = await rp(registerOptions);
+          console.log(`✅ Registration response:`, registerResponse);
+          
+          // Add to network nodes if not already present
+          if (this.networkNodes.indexOf(seedUrl) === -1) {
+            this.networkNodes.push(seedUrl);
+            discovered++;
+            console.log(`✅ Added seed to network: ${seedUrl}`);
+          }
+
+          // Try to get the peer list from the seed
+          try {
+            const peersOptions = {
+              uri: seedUrl + "/api/network/peers",
+              method: "GET",
+              json: true,
+              timeout: 10000
+            };
+
+            console.log(`📋 Fetching peers from ${seedUrl}...`);
+            const peersResponse = await rp(peersOptions);
+            
+            if (peersResponse && peersResponse.peers && Array.isArray(peersResponse.peers)) {
+              console.log(`📊 Found ${peersResponse.peers.length} peers from ${seedUrl}`);
+              
+              for (const peer of peersResponse.peers) {
+                const peerUrl = peer.url || peer;
+                if (peerUrl && peerUrl !== this.currentNodeUrl && this.networkNodes.indexOf(peerUrl) === -1) {
+                  this.networkNodes.push(peerUrl);
+                  discovered++;
+                  console.log(`📡 Discovered new peer: ${peerUrl}`);
+                }
+              }
+            }
+          } catch (peersError) {
+            console.log(`⚠️ Could not fetch peers from ${seedUrl}:`, peersError.message);
+          }
+
+        } catch (seedError) {
+          console.log(`❌ Failed to connect to seed ${seedUrl}:`, seedError.message);
+        }
+      }
+
+      // Save updated network nodes
+      await this.saveToDatabase();
+      
+      // Sync blockchain with discovered peers
+      if (this.networkNodes.length > 0) {
+        console.log(`🔄 Syncing with ${this.networkNodes.length} peers...`);
+        await this.syncWithPeers();
+      }
+
       // Update metrics
       this.nodeMetrics.peersConnected = this.networkNodes.length;
       
+      console.log(`🎉 Peer discovery completed: ${discovered} new, ${this.networkNodes.length} total`);
+      console.log(`📋 Current network nodes:`, this.networkNodes);
+      
       return {
-        discovered: 0,
-        total: this.networkNodes.length
+        discovered,
+        total: this.networkNodes.length,
+        peers: this.networkNodes
       };
     } catch (error) {
-      console.error('Peer discovery error:', error);
-      return { discovered: 0, total: this.networkNodes.length };
+      console.error('💥 Peer discovery error:', error);
+      return { discovered: 0, total: this.networkNodes.length, peers: this.networkNodes };
+    }
+  }
+
+  async syncWithPeers() {
+    if (this.networkNodes.length === 0) {
+      console.log(`⚠️ No peers to sync with`);
+      return { synced: 0, updated: false };
+    }
+
+    console.log(`🔄 Syncing blockchain with ${this.networkNodes.length} peers...`);
+    const blockchains = [];
+    const failedNodes = [];
+
+    // Import request-promise
+    let rp;
+    try {
+      rp = (await import('request-promise')).default;
+    } catch (importError) {
+      console.error('❌ Failed to import request-promise for sync:', importError.message);
+      return { synced: 0, updated: false };
+    }
+
+    for (const nodeUrl of this.networkNodes) {
+      try {
+        console.log(`📡 Fetching blockchain from ${nodeUrl}...`);
+        
+        const response = await rp({
+          uri: nodeUrl + "/blockchain",
+          method: "GET",
+          json: true,
+          timeout: 12000,
+          resolveWithFullResponse: false
+        });
+
+        if (response && response.chain && Array.isArray(response.chain)) {
+          blockchains.push(response);
+          console.log(`📊 Fetched chain from ${nodeUrl}: ${response.chain.length} blocks (local: ${this.chain.length})`);
+        } else {
+          console.log(`⚠️ Invalid blockchain response from ${nodeUrl}`);
+        }
+      } catch (error) {
+        console.log(`❌ Failed to sync with ${nodeUrl}: ${error.message}`);
+        failedNodes.push(nodeUrl);
+      }
+    }
+
+    // Remove failed nodes
+    for (const failedNode of failedNodes) {
+      const index = this.networkNodes.indexOf(failedNode);
+      if (index > -1) {
+        this.networkNodes.splice(index, 1);
+        console.log(`🗑️ Removed unresponsive node: ${failedNode}`);
+      }
+    }
+
+    if (blockchains.length > 0) {
+      console.log(`🔍 Comparing ${blockchains.length} blockchain(s) for consensus...`);
+      
+      const chainReplaced = await this.resolveConflicts(blockchains);
+      if (chainReplaced) {
+        console.log(`✅ Blockchain updated from network sync! New length: ${this.chain.length}`);
+        return { synced: blockchains.length, updated: true };
+      } else {
+        console.log(`✅ Local blockchain is up to date (${this.chain.length} blocks)`);
+        return { synced: blockchains.length, updated: false };
+      }
+    } else {
+      console.log(`❌ No valid blockchains received from peers`);
+      return { synced: 0, updated: false };
     }
   }
 
