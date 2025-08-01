@@ -1,77 +1,25 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ekehi Network Block Explorer</title>
+    <title>Ekehi Network - Block Explorer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .explorer-card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        .metric-card {
-            background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            text-align: center;
-            padding: 20px;
-        }
-        .search-card {
-            background: linear-gradient(45deg, #43e97b 0%, #38f9d7 100%);
-            color: white;
-        }
-        .hash-display {
-            font-family: 'Courier New', monospace;
-            font-size: 0.9em;
-            word-break: break-all;
-        }
-        .block-card, .tx-card {
-            border-left: 4px solid #007bff;
-            margin-bottom: 15px;
-        }
-        .address-badge {
-            background: #e9ecef;
-            color: #495057;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.8em;
-        }
-        .amount-display {
-            font-weight: bold;
-            color: #28a745;
-        }
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
-        }
-        .table-responsive {
-            border-radius: 10px;
-            overflow: hidden;
-        }
-        .status-badge {
-            font-size: 0.8em;
-        }
-        .block-height {
-            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 20px;
-            font-weight: bold;
-        }
+        body { background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%); min-height: 100vh; }
+        .explorer-card { border: none; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); margin-bottom: 20px; transition: transform 0.3s; }
+        .explorer-card:hover { transform: translateY(-2px); }
+        .metric-card { text-align: center; }
+        .metric-card i { color: #0984e3; }
+        .metric-card h4 { color: #2d3436; margin: 10px 0 5px 0; }
+        .hash-display { font-family: 'Courier New', monospace; font-size: 0.9rem; word-break: break-all; }
+        .block-item, .tx-item { background: #f8f9fa; border-radius: 8px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #0984e3; }
+        .search-box { background: white; border-radius: 10px; padding: 20px; margin-bottom: 30px; }
+        .detail-modal .modal-content { border-radius: 15px; }
+        .badge-status { font-size: 0.8rem; }
+        .data-table { font-size: 0.9rem; }
+        .data-table th { background: #f8f9fa; }
     </style>
 </head>
 <body>
@@ -84,11 +32,36 @@
                 <a class="nav-link" href="/dashboard">
                     <i class="fas fa-tachometer-alt"></i> Dashboard
                 </a>
+                <a class="nav-link" href="/api/docs">
+                    <i class="fas fa-book"></i> API Docs
+                </a>
             </div>
         </div>
     </nav>
 
     <div class="container mt-4">
+        <!-- Search Section -->
+        <div class="search-box">
+            <h4 class="text-center mb-4"><i class="fas fa-search me-2"></i>Blockchain Explorer</h4>
+            <div class="row">
+                <div class="col-md-8 offset-md-2">
+                    <div class="input-group">
+                        <input type="text" class="form-control form-control-lg" id="searchInput" 
+                               placeholder="Search by block hash, transaction ID, or address...">
+                        <button class="btn btn-primary btn-lg" onclick="performSearch()">
+                            <i class="fas fa-search"></i> Search
+                        </button>
+                    </div>
+                    <div class="mt-2 text-center">
+                        <small class="text-muted">
+                            Enter a block hash, transaction ID, or EKH address to explore the blockchain
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div id="searchResults" class="mt-4"></div>
+        </div>
+
         <!-- Network Stats -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
@@ -114,14 +87,14 @@
                     <div class="card-body">
                         <i class="fas fa-coins fa-2x mb-2"></i>
                         <h4 id="totalSupply">-</h4>
-                        <p class="mb-0">EKH Supply</p>
+                        <p class="mb-0">Total Supply (EKH)</p>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
                 <div class="card explorer-card metric-card">
                     <div class="card-body">
-                        <i class="fas fa-network-wired fa-2x mb-2"></i>
+                        <i class="fas fa-chart-line fa-2x mb-2"></i>
                         <h4 id="difficulty">-</h4>
                         <p class="mb-0">Difficulty</p>
                     </div>
@@ -129,112 +102,91 @@
             </div>
         </div>
 
-        <!-- Search Section -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card explorer-card search-card">
-                    <div class="card-body">
-                        <h5 class="card-title"><i class="fas fa-search me-2"></i>Search Blockchain</h5>
-                        <div class="row">
-                            <div class="col-md-8">
-                                <input type="text" class="form-control" id="searchInput" 
-                                       placeholder="Enter block hash, transaction ID, or address...">
-                            </div>
-                            <div class="col-md-2">
-                                <select class="form-control" id="searchType">
-                                    <option value="auto">Auto-detect</option>
-                                    <option value="block">Block Hash</option>
-                                    <option value="transaction">Transaction ID</option>
-                                    <option value="address">Address</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <button type="button" class="btn btn-light w-100" onclick="performSearch()">
-                                    <i class="fas fa-search"></i> Search
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Loading Spinner -->
-        <div class="loading-spinner" id="loadingSpinner">
-            <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
-            </div>
-            <p class="mt-2">Searching blockchain...</p>
-        </div>
-
-        <!-- Search Results -->
-        <div id="searchResults"></div>
-
-        <!-- Latest Blocks and Transactions -->
+        <!-- Main Content -->
         <div class="row">
-            <!-- Latest Blocks -->
+            <!-- Recent Blocks -->
             <div class="col-lg-6">
                 <div class="card explorer-card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Latest Blocks</h5>
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Recent Blocks</h5>
+                        <button class="btn btn-light btn-sm" onclick="loadExplorerData()">
+                            <i class="fas fa-refresh"></i>
+                        </button>
                     </div>
-                    <div class="card-body">
-                        <div id="latestBlocks">
-                            <!-- Dynamic content -->
-                        </div>
-                        <div class="text-center mt-3">
-                            <button class="btn btn-outline-primary" onclick="loadMoreBlocks()">
-                                <i class="fas fa-arrow-down"></i> Load More Blocks
-                            </button>
+                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                        <div id="recentBlocks">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> Loading blocks...
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Latest Transactions -->
+            <!-- Recent Transactions -->
             <div class="col-lg-6">
                 <div class="card explorer-card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Latest Transactions</h5>
+                    <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Recent Transactions</h5>
+                        <span class="badge bg-light text-dark" id="mempoolCount">0 pending</span>
                     </div>
-                    <div class="card-body">
-                        <div id="latestTransactions">
-                            <!-- Dynamic content -->
-                        </div>
-                        <div class="text-center mt-3">
-                            <button class="btn btn-outline-success" onclick="loadMempool()">
-                                <i class="fas fa-clock"></i> View Mempool
-                            </button>
+                    <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                        <div id="recentTransactions">
+                            <div class="text-center">
+                                <i class="fas fa-spinner fa-spin"></i> Loading transactions...
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Rich List -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card explorer-card">
-                    <div class="card-header bg-warning text-dark">
-                        <h5 class="mb-0"><i class="fas fa-crown me-2"></i>Rich List - Top EKH Holders</h5>
+    <!-- Block Detail Modal -->
+    <div class="modal fade" id="blockModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content detail-modal">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-cube me-2"></i>Block Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="blockModalBody">
+                    <div class="text-center">
+                        <i class="fas fa-spinner fa-spin"></i> Loading block details...
                     </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Rank</th>
-                                        <th>Address</th>
-                                        <th>Balance</th>
-                                        <th>Transactions</th>
-                                        <th>%</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="richListTable">
-                                    <!-- Dynamic content -->
-                                </tbody>
-                            </table>
-                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Detail Modal -->
+    <div class="modal fade" id="txModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content detail-modal">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-exchange-alt me-2"></i>Transaction Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="txModalBody">
+                    <div class="text-center">
+                        <i class="fas fa-spinner fa-spin"></i> Loading transaction details...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Address Detail Modal -->
+    <div class="modal fade" id="addressModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content detail-modal">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title"><i class="fas fa-wallet me-2"></i>Address Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="addressModalBody">
+                    <div class="text-center">
+                        <i class="fas fa-spinner fa-spin"></i> Loading address details...
                     </div>
                 </div>
             </div>
@@ -243,459 +195,421 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let blockchainData = {};
-        let currentBlockPage = 0;
-
-        // Initialize explorer
         document.addEventListener('DOMContentLoaded', function() {
             loadExplorerData();
-            setInterval(loadExplorerData, 15000); // Refresh every 15 seconds
+            setInterval(loadExplorerData, 15000); // Auto-refresh every 15 seconds
+
+            // Handle enter key in search
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    performSearch();
+                }
+            });
         });
 
         async function loadExplorerData() {
             try {
-                // Load blockchain stats
-                const statsResponse = await fetch('/stats');
+                const [statsResponse, blockchainResponse, mempoolResponse] = await Promise.all([
+                    fetch('/stats'),
+                    fetch('/blockchain'),
+                    fetch('/mempool')
+                ]);
+
+                if (!statsResponse.ok || !blockchainResponse.ok || !mempoolResponse.ok) {
+                    throw new Error('Failed to fetch data');
+                }
+
                 const stats = await statsResponse.json();
+                const blockchain = await blockchainResponse.json();
+                const mempool = await mempoolResponse.json();
+
                 updateStats(stats);
+                updateRecentBlocks(blockchain.chain || []);
+                updateRecentTransactions(mempool.pendingTransactions || []);
 
-                // Load blockchain data
-                const blockchainResponse = await fetch('/blockchain');
-                blockchainData = await blockchainResponse.json();
-
-                // Update displays
-                updateLatestBlocks();
-                updateLatestTransactions();
-                loadRichList();
-
+                document.getElementById('mempoolCount').textContent = `${mempool.count || 0} pending`;
             } catch (error) {
                 console.error('Failed to load explorer data:', error);
+                showAlert('Failed to load explorer data', 'danger');
             }
         }
 
         function updateStats(stats) {
-            document.getElementById('totalBlocks').textContent = stats.totalBlocks || '-';
-            document.getElementById('totalTx').textContent = stats.totalTransactions || '-';
-            document.getElementById('totalSupply').textContent = (stats.totalSupply || 0).toFixed(2);
-            document.getElementById('difficulty').textContent = stats.difficulty || '-';
+            document.getElementById('totalBlocks').textContent = stats.totalBlocks || 0;
+            document.getElementById('totalTx').textContent = stats.totalTransactions || 0;
+            document.getElementById('totalSupply').textContent = (stats.totalSupply || 0).toFixed(1);
+            document.getElementById('difficulty').textContent = stats.difficulty || 0;
         }
 
-        function updateLatestBlocks() {
-            const container = document.getElementById('latestBlocks');
-            const blocks = blockchainData.chain ? blockchainData.chain.slice(-10).reverse() : [];
-            
-            container.innerHTML = blocks.map(block => `
-                <div class="card block-card">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <span class="block-height">#${block.index}</span>
-                                <small class="text-muted ms-2">${formatTime(block.timestamp)}</small>
-                            </div>
-                            <div class="text-end">
-                                <div class="badge bg-primary">${block.transactions.length} TXs</div>
-                            </div>
-                        </div>
-                        <div class="mt-2">
-                            <strong>Hash:</strong> 
-                            <code class="hash-display" onclick="searchSpecific('${block.hash}', 'block')" style="cursor: pointer;">
-                                ${block.hash.substring(0, 32)}...
-                            </code>
-                        </div>
+        function updateRecentBlocks(blocks) {
+            const container = document.getElementById('recentBlocks');
+            if (!blocks.length) {
+                container.innerHTML = '<div class="text-center text-muted">No blocks available</div>';
+                return;
+            }
+
+            const recentBlocks = blocks.slice(-10).reverse(); // Last 10 blocks, newest first
+            container.innerHTML = recentBlocks.map(block => `
+                <div class="block-item" style="cursor: pointer;" onclick="showBlockDetails('${block.hash}')">
+                    <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <strong>Nonce:</strong> ${block.nonce}
-                            <strong class="ms-3">Difficulty:</strong> ${block.difficulty || 4}
+                            <h6 class="mb-1">
+                                <i class="fas fa-cube text-primary me-1"></i>
+                                Block #${block.index}
+                                ${block.index === 1 ? '<span class="badge bg-warning ms-2">Genesis</span>' : ''}
+                            </h6>
+                            <div class="hash-display text-muted small mb-2">
+                                ${block.hash === '0' ? 'Genesis Block' : block.hash}
+                            </div>
+                            <div class="small">
+                                <span class="badge bg-primary me-1">${block.transactions ? block.transactions.length : 0} TXs</span>
+                                <span class="badge bg-secondary me-1">Difficulty: ${block.difficulty || 'N/A'}</span>
+                                <span class="badge bg-info">Nonce: ${block.nonce || 'N/A'}</span>
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted">${formatTime(block.timestamp)}</small>
+                            <br><small class="text-muted">${formatTimeAgo(block.timestamp)}</small>
                         </div>
                     </div>
                 </div>
             `).join('');
         }
 
-        function updateLatestTransactions() {
-            const container = document.getElementById('latestTransactions');
-            let allTransactions = [];
-            
-            if (blockchainData.chain) {
-                blockchainData.chain.forEach(block => {
-                    block.transactions.forEach(tx => {
-                        tx.blockIndex = block.index;
-                        allTransactions.push(tx);
-                    });
-                });
+        function updateRecentTransactions(transactions) {
+            const container = document.getElementById('recentTransactions');
+            if (!transactions.length) {
+                container.innerHTML = '<div class="text-center text-muted">No pending transactions</div>';
+                return;
             }
-            
-            const recentTx = allTransactions.slice(-10).reverse();
-            
-            container.innerHTML = recentTx.map(tx => `
-                <div class="card tx-card">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong class="amount-display">${tx.amount} EKH</strong>
-                                ${tx.fee ? `<small class="text-muted">(+${tx.fee} fee)</small>` : ''}
+
+            container.innerHTML = transactions.slice(-20).reverse().map(tx => `
+                <div class="tx-item" style="cursor: pointer;" onclick="showTransactionDetails('${tx.transactionId}')">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="mb-1">
+                                <i class="fas fa-exchange-alt text-success me-1"></i>
+                                ${tx.amount} EKH
+                                ${tx.sender === 'FAUCET' ? '<span class="badge bg-warning ms-2">Faucet</span>' : ''}
+                                ${tx.sender === '00' ? '<span class="badge bg-info ms-2">Mining</span>' : ''}
+                            </h6>
+                            <div class="small text-muted mb-1">
+                                <strong>From:</strong> ${formatAddress(tx.sender)}
+                                <br><strong>To:</strong> ${formatAddress(tx.recipient)}
                             </div>
-                            <div>
-                                <span class="badge bg-info">Block #${tx.blockIndex}</span>
+                            <div class="small">
+                                <span class="badge bg-secondary">Fee: ${tx.fee || 0} EKH</span>
+                                <span class="badge bg-outline-primary">ID: ${tx.transactionId ? tx.transactionId.substring(0, 8) + '...' : 'N/A'}</span>
                             </div>
                         </div>
-                        <div class="mt-2">
-                            <div><strong>From:</strong> 
-                                <span class="address-badge" onclick="searchSpecific('${tx.sender}', 'address')" style="cursor: pointer;">
-                                    ${tx.sender === '00' ? 'MINING REWARD' : tx.sender.substring(0, 16) + '...'}
-                                </span>
-                            </div>
-                            <div><strong>To:</strong> 
-                                <span class="address-badge" onclick="searchSpecific('${tx.recipient}', 'address')" style="cursor: pointer;">
-                                    ${tx.recipient.substring(0, 16)}...
-                                </span>
-                            </div>
-                            <div class="mt-1">
-                                <small class="text-muted">TX: ${tx.transactionId.substring(0, 16)}...</small>
-                            </div>
+                        <div class="text-end">
+                            <small class="text-muted">${formatTime(tx.timestamp)}</small>
+                            <br><small class="text-muted">${formatTimeAgo(tx.timestamp)}</small>
                         </div>
                     </div>
                 </div>
             `).join('');
-        }
-
-        async function loadRichList() {
-            try {
-                const response = await fetch('/richlist');
-                const data = await response.json();
-                const container = document.getElementById('richListTable');
-                
-                container.innerHTML = data.richList.slice(0, 10).map((addr, index) => `
-                    <tr>
-                        <td><span class="badge bg-warning text-dark">#${index + 1}</span></td>
-                        <td>
-                            <code class="hash-display" onclick="searchSpecific('${addr.address}', 'address')" style="cursor: pointer;">
-                                ${addr.address.substring(0, 20)}...
-                            </code>
-                        </td>
-                        <td><strong class="amount-display">${addr.addressBalance.toFixed(4)} EKH</strong></td>
-                        <td>${addr.transactionCount}</td>
-                        <td>${((addr.addressBalance / data.richList.reduce((sum, a) => sum + a.addressBalance, 0)) * 100).toFixed(2)}%</td>
-                    </tr>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load rich list:', error);
-            }
         }
 
         async function performSearch() {
-            const searchValue = document.getElementById('searchInput').value.trim();
-            const searchType = document.getElementById('searchType').value;
-            
-            if (!searchValue) {
-                alert('Please enter a search term');
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) {
+                showAlert('Please enter a search term', 'warning');
                 return;
             }
 
-            showLoading(true);
-            
-            try {
-                let detectedType = searchType;
-                if (searchType === 'auto') {
-                    detectedType = detectSearchType(searchValue);
-                }
-                
-                await searchSpecific(searchValue, detectedType);
-            } catch (error) {
-                console.error('Search error:', error);
-                showSearchResults('<div class="alert alert-danger">Search failed. Please try again.</div>');
-            } finally {
-                showLoading(false);
-            }
-        }
+            const resultsContainer = document.getElementById('searchResults');
+            resultsContainer.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Searching...</div>';
 
-        function detectSearchType(value) {
-            if (value.startsWith('EKH') && value.length === 51) {
-                return 'address';
-            } else if (value.length === 64) {
-                return 'block';
-            } else if (value.length === 32) {
-                return 'transaction';
-            }
-            return 'block'; // Default
-        }
-
-        async function searchSpecific(searchValue, type) {
-            showLoading(true);
-            
             try {
-                if (type === 'block') {
-                    const response = await fetch(`/block/${searchValue}`);
-                    const data = await response.json();
-                    displayBlockResult(data.block);
-                } else if (type === 'transaction') {
-                    const response = await fetch(`/transaction/${searchValue}`);
-                    const data = await response.json();
-                    displayTransactionResult(data);
-                } else if (type === 'address') {
-                    const response = await fetch(`/address/${searchValue}`);
-                    const data = await response.json();
-                    displayAddressResult(data.addressData, searchValue);
+                // Determine search type and perform appropriate search
+                if (query.startsWith('EKH') && query.length === 51) {
+                    await searchAddress(query);
+                } else if (query.length === 64) {
+                    await searchBlock(query);
+                } else if (query.length === 32) {
+                    await searchTransaction(query);
+                } else {
+                    resultsContainer.innerHTML = `
+                        <div class="alert alert-warning">
+                            <strong>Invalid search format</strong><br>
+                            Please enter:<br>
+                            • EKH address (51 characters starting with EKH)<br>
+                            • Block hash (64 hex characters)<br>
+                            • Transaction ID (32 hex characters)
+                        </div>
+                    `;
                 }
             } catch (error) {
-                showSearchResults('<div class="alert alert-danger">No data found for search term.</div>');
-            } finally {
-                showLoading(false);
+                resultsContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        Search failed: ${error.message}
+                    </div>
+                `;
             }
         }
 
-        function displayBlockResult(block) {
-            if (!block) {
-                showSearchResults('<div class="alert alert-warning">Block not found.</div>');
-                return;
+        async function searchBlock(hash) {
+            const response = await fetch(`/block/${hash}`);
+            const data = await response.json();
+
+            if (data.block) {
+                showBlockDetails(hash);
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Block found! Details are shown below.
+                    </div>
+                `;
+            } else {
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-warning">Block not found</div>
+                `;
             }
-
-            const html = `
-                <div class="card explorer-card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Block #${block.index}</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Hash:</strong><br><code class="hash-display">${block.hash}</code></p>
-                                <p><strong>Previous Hash:</strong><br><code class="hash-display">${block.previousBlockHash}</code></p>
-                                <p><strong>Timestamp:</strong> ${new Date(block.timestamp).toLocaleString()}</p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Nonce:</strong> ${block.nonce}</p>
-                                <p><strong>Difficulty:</strong> ${block.difficulty || 4}</p>
-                                <p><strong>Transactions:</strong> ${block.transactions.length}</p>
-                                <p><strong>Total Fees:</strong> ${block.totalFees || 0} EKH</p>
-                            </div>
-                        </div>
-                        <h6 class="mt-3">Transactions in this Block:</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>TX ID</th>
-                                        <th>From</th>
-                                        <th>To</th>
-                                        <th>Amount</th>
-                                        <th>Fee</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${block.transactions.map(tx => `
-                                        <tr>
-                                            <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
-                                            <td>${tx.sender === '00' ? 'MINING' : tx.sender.substring(0, 16) + '...'}</td>
-                                            <td>${tx.recipient.substring(0, 16)}...</td>
-                                            <td class="amount-display">${tx.amount} EKH</td>
-                                            <td>${tx.fee || 0} EKH</td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            `;
-            showSearchResults(html);
         }
 
-        function displayTransactionResult(data) {
-            if (!data.transaction) {
-                showSearchResults('<div class="alert alert-warning">Transaction not found.</div>');
-                return;
+        async function searchTransaction(id) {
+            const response = await fetch(`/transaction/${id}`);
+            const data = await response.json();
+
+            if (data.transaction) {
+                showTransactionDetails(id);
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Transaction found! Details are shown below.
+                    </div>
+                `;
+            } else {
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-warning">Transaction not found</div>
+                `;
             }
-
-            const tx = data.transaction;
-            const block = data.block;
-
-            const html = `
-                <div class="card explorer-card">
-                    <div class="card-header bg-success text-white">
-                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Transaction Details</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Transaction ID:</strong><br><code class="hash-display">${tx.transactionId}</code></p>
-                                <p><strong>Amount:</strong> <span class="amount-display">${tx.amount} EKH</span></p>
-                                <p><strong>Fee:</strong> ${tx.fee || 0} EKH</p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Block:</strong> #${block.index}</p>
-                                <p><strong>Timestamp:</strong> ${new Date(tx.timestamp).toLocaleString()}</p>
-                                <p><strong>Network:</strong> ${tx.network}</p>
-                            </div>
-                        </div>
-                        <div class="mt-3">
-                            <p><strong>From Address:</strong><br>
-                                <code class="hash-display">${tx.sender === '00' ? 'MINING REWARD' : tx.sender}</code>
-                            </p>
-                            <p><strong>To Address:</strong><br>
-                                <code class="hash-display">${tx.recipient}</code>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            `;
-            showSearchResults(html);
         }
 
-        function displayAddressResult(addressData, address) {
-            if (!addressData) {
-                showSearchResults('<div class="alert alert-warning">Address not found or has no transactions.</div>');
-                return;
+        async function searchAddress(address) {
+            const response = await fetch(`/address/${address}`);
+            const data = await response.json();
+
+            if (data.addressData) {
+                showAddressDetails(address);
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-success">
+                        <i class="fas fa-check-circle"></i> Address found! Details are shown below.
+                    </div>
+                `;
+            } else {
+                document.getElementById('searchResults').innerHTML = `
+                    <div class="alert alert-warning">Address not found or has no transactions</div>
+                `;
             }
-
-            const html = `
-                <div class="card explorer-card">
-                    <div class="card-header bg-info text-white">
-                        <h5 class="mb-0"><i class="fas fa-wallet me-2"></i>Address Details</h5>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Address:</strong><br><code class="hash-display">${address}</code></p>
-                        <div class="row">
-                            <div class="col-md-3">
-                                <div class="card bg-success text-white text-center">
-                                    <div class="card-body">
-                                        <h4>${addressData.addressBalance.toFixed(4)}</h4>
-                                        <p class="mb-0">Balance (EKH)</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card bg-primary text-white text-center">
-                                    <div class="card-body">
-                                        <h4>${addressData.transactionCount}</h4>
-                                        <p class="mb-0">Transactions</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card bg-warning text-dark text-center">
-                                    <div class="card-body">
-                                        <h4>${addressData.totalReceived.toFixed(4)}</h4>
-                                        <p class="mb-0">Total Received</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-3">
-                                <div class="card bg-danger text-white text-center">
-                                    <div class="card-body">
-                                        <h4>${addressData.totalSent.toFixed(4)}</h4>
-                                        <p class="mb-0">Total Sent</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <h6 class="mt-4">Transaction History:</h6>
-                        <div class="table-responsive">
-                            <table class="table table-sm">
-                                <thead>
-                                    <tr>
-                                        <th>TX ID</th>
-                                        <th>Type</th>
-                                        <th>Amount</th>
-                                        <th>From/To</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${addressData.addressTransactions.slice(-20).reverse().map(tx => {
-                                        const isReceived = tx.recipient === address;
-                                        return `
-                                            <tr>
-                                                <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
-                                                <td>
-                                                    <span class="badge ${isReceived ? 'bg-success' : 'bg-danger'}">
-                                                        ${isReceived ? 'Received' : 'Sent'}
-                                                    </span>
-                                                </td>
-                                                <td class="amount-display">${tx.amount} EKH</td>
-                                                <td><code>${isReceived ? tx.sender.substring(0, 16) : tx.recipient.substring(0, 16)}...</code></td>
-                                                <td>${formatTime(tx.timestamp)}</td>
-                                            </tr>
-                                        `;
-                                    }).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            `;
-            showSearchResults(html);
         }
 
-        function showSearchResults(html) {
-            document.getElementById('searchResults').innerHTML = html;
-            document.getElementById('searchResults').scrollIntoView({ behavior: 'smooth' });
+        async function showBlockDetails(hash) {
+            const modal = new bootstrap.Modal(document.getElementById('blockModal'));
+            const body = document.getElementById('blockModalBody');
+
+            body.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+            modal.show();
+
+            try {
+                const response = await fetch(`/block/${hash}`);
+                const data = await response.json();
+
+                if (!data.block) {
+                    throw new Error('Block not found');
+                }
+
+                const block = data.block;
+                body.innerHTML = `
+                    <table class="table table-striped data-table">
+                        <tr><th>Block Index</th><td>#${block.index}</td></tr>
+                        <tr><th>Hash</th><td class="hash-display">${block.hash}</td></tr>
+                        <tr><th>Previous Hash</th><td class="hash-display">${block.previousBlockHash}</td></tr>
+                        <tr><th>Timestamp</th><td>${formatTime(block.timestamp)} (${formatTimeAgo(block.timestamp)})</td></tr>
+                        <tr><th>Transactions</th><td>${block.transactions ? block.transactions.length : 0}</td></tr>
+                        <tr><th>Difficulty</th><td>${block.difficulty || 'N/A'}</td></tr>
+                        <tr><th>Nonce</th><td>${block.nonce || 'N/A'}</td></tr>
+                        <tr><th>Total Fees</th><td>${block.totalFees || 0} EKH</td></tr>
+                        <tr><th>Network</th><td>${block.network || 'Ekehi Network'}</td></tr>
+                        <tr><th>Version</th><td>${block.version || '1.0.0'}</td></tr>
+                    </table>
+
+                    ${block.transactions && block.transactions.length > 0 ? `
+                        <h6 class="mt-4 mb-3"><i class="fas fa-list me-2"></i>Transactions in this Block</h6>
+                        <div style="max-height: 300px; overflow-y: auto;">
+                            ${block.transactions.map((tx, index) => `
+                                <div class="card mb-2">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <strong>${tx.amount} EKH</strong>
+                                                ${tx.sender === '00' ? '<span class="badge bg-info ms-1">Mining Reward</span>' : ''}
+                                                ${tx.sender === 'FAUCET' ? '<span class="badge bg-warning ms-1">Faucet</span>' : ''}
+                                                <br><small class="text-muted">
+                                                    ${formatAddress(tx.sender)} → ${formatAddress(tx.recipient)}
+                                                </small>
+                                            </div>
+                                            <div class="text-end">
+                                                <small>Fee: ${tx.fee || 0} EKH</small>
+                                                <br><small class="text-muted">${tx.transactionId ? tx.transactionId.substring(0, 16) + '...' : 'N/A'}</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p class="text-muted mt-4">No transactions in this block</p>'}
+                `;
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-danger">Failed to load block details: ${error.message}</div>`;
+            }
         }
 
-        function showLoading(show) {
-            document.getElementById('loadingSpinner').style.display = show ? 'block' : 'none';
+        async function showTransactionDetails(id) {
+            const modal = new bootstrap.Modal(document.getElementById('txModal'));
+            const body = document.getElementById('txModalBody');
+
+            body.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+            modal.show();
+
+            try {
+                const response = await fetch(`/transaction/${id}`);
+                const data = await response.json();
+
+                if (!data.transaction) {
+                    throw new Error('Transaction not found');
+                }
+
+                const tx = data.transaction;
+                const block = data.block;
+
+                body.innerHTML = `
+                    <table class="table table-striped data-table">
+                        <tr><th>Transaction ID</th><td class="hash-display">${tx.transactionId}</td></tr>
+                        <tr><th>Amount</th><td><strong>${tx.amount} EKH</strong></td></tr>
+                        <tr><th>Sender</th><td class="hash-display">${tx.sender}${tx.sender === '00' ? ' <span class="badge bg-info">Mining</span>' : ''}${tx.sender === 'FAUCET' ? ' <span class="badge bg-warning">Faucet</span>' : ''}</td></tr>
+                        <tr><th>Recipient</th><td class="hash-display">${tx.recipient}</td></tr>
+                        <tr><th>Fee</th><td>${tx.fee || 0} EKH</td></tr>
+                        <tr><th>Timestamp</th><td>${formatTime(tx.timestamp)} (${formatTimeAgo(tx.timestamp)})</td></tr>
+                        <tr><th>Network</th><td>${tx.network || 'Ekehi Network'}</td></tr>
+                        ${block ? `
+                            <tr><th>Block</th><td>
+                                <a href="#" onclick="showBlockDetails('${block.hash}')" class="text-decoration-none">
+                                    Block #${block.index}
+                                </a>
+                            </td></tr>
+                            <tr><th>Confirmations</th><td><span class="badge bg-success">Confirmed</span></td></tr>
+                        ` : `
+                            <tr><th>Status</th><td><span class="badge bg-warning">Pending</span></td></tr>
+                        `}
+                    </table>
+                `;
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-danger">Failed to load transaction details: ${error.message}</div>`;
+            }
+        }
+
+        async function showAddressDetails(address) {
+            const modal = new bootstrap.Modal(document.getElementById('addressModal'));
+            const body = document.getElementById('addressModalBody');
+
+            body.innerHTML = '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+            modal.show();
+
+            try {
+                const response = await fetch(`/address/${address}`);
+                const data = await response.json();
+
+                if (!data.addressData) {
+                    throw new Error('Address data not found');
+                }
+
+                const addrData = data.addressData;
+
+                body.innerHTML = `
+                    <table class="table table-striped data-table">
+                        <tr><th>Address</th><td class="hash-display">${address}</td></tr>
+                        <tr><th>Balance</th><td><strong>${addrData.addressBalance} EKH</strong></td></tr>
+                        <tr><th>Total Received</th><td>${addrData.totalReceived} EKH</td></tr>
+                        <tr><th>Total Sent</th><td>${addrData.totalSent} EKH</td></tr>
+                        <tr><th>Total Fees</th><td>${addrData.totalFees} EKH</td></tr>
+                        <tr><th>Transaction Count</th><td>${addrData.transactionCount}</td></tr>
+                    </table>
+
+                    ${addrData.addressTransactions && addrData.addressTransactions.length > 0 ? `
+                        <h6 class="mt-4 mb-3"><i class="fas fa-history me-2"></i>Transaction History</h6>
+                        <div style="max-height: 400px; overflow-y: auto;">
+                            ${addrData.addressTransactions.reverse().map(tx => `
+                                <div class="card mb-2">
+                                    <div class="card-body p-3">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <strong>${tx.amount} EKH</strong>
+                                                ${tx.recipient === address ? '<span class="badge bg-success ms-1">Received</span>' : '<span class="badge bg-danger ms-1">Sent</span>'}
+                                                ${tx.sender === '00' ? '<span class="badge bg-info ms-1">Mining</span>' : ''}
+                                                ${tx.sender === 'FAUCET' ? '<span class="badge bg-warning ms-1">Faucet</span>' : ''}
+                                                <br><small class="text-muted">
+                                                    ${tx.recipient === address ? 'From: ' + formatAddress(tx.sender) : 'To: ' + formatAddress(tx.recipient)}
+                                                </small>
+                                            </div>
+                                            <div class="text-end">
+                                                <small>${formatTime(tx.timestamp)}</small>
+                                                <br><small class="text-muted">Fee: ${tx.fee || 0} EKH</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<p class="text-muted mt-4">No transactions found for this address</p>'}
+                `;
+            } catch (error) {
+                body.innerHTML = `<div class="alert alert-danger">Failed to load address details: ${error.message}</div>`;
+            }
+        }
+
+        function formatAddress(address) {
+            if (address === '00') return 'Mining Reward';
+            if (address === 'FAUCET') return 'Testnet Faucet';
+            if (address && address.length > 20) {
+                return address.substring(0, 10) + '...' + address.substring(address.length - 10);
+            }
+            return address;
         }
 
         function formatTime(timestamp) {
             return new Date(timestamp).toLocaleString();
         }
 
-        function loadMoreBlocks() {
-            // Implement pagination for blocks
-            alert('Load more blocks functionality - can be expanded based on needs');
+        function formatTimeAgo(timestamp) {
+            const now = Date.now();
+            const diff = now - timestamp;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+            if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            return `${seconds} second${seconds > 1 ? 's' : ''} ago`;
         }
 
-        async function loadMempool() {
-            try {
-                const response = await fetch('/mempool');
-                const data = await response.json();
-                
-                const html = `
-                    <div class="card explorer-card">
-                        <div class="card-header bg-warning text-dark">
-                            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Mempool - Pending Transactions</h5>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>Pending Transactions:</strong> ${data.count}</p>
-                            <p><strong>Total Value:</strong> ${data.totalValue} EKH</p>
-                            <p><strong>Total Fees:</strong> ${data.totalFees} EKH</p>
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <thead>
-                                        <tr>
-                                            <th>TX ID</th>
-                                            <th>Amount</th>
-                                            <th>From</th>
-                                            <th>To</th>
-                                            <th>Fee</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${data.pendingTransactions.map(tx => `
-                                            <tr>
-                                                <td><code>${tx.transactionId.substring(0, 16)}...</code></td>
-                                                <td class="amount-display">${tx.amount} EKH</td>
-                                                <td>${tx.sender.substring(0, 16)}...</td>
-                                                <td>${tx.recipient.substring(0, 16)}...</td>
-                                                <td>${tx.fee || 0} EKH</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                showSearchResults(html);
-            } catch (error) {
-                showSearchResults('<div class="alert alert-danger">Failed to load mempool data.</div>');
-            }
-        }
+        function showAlert(message, type) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+            alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alertDiv);
 
-        // Enter key search
-        document.getElementById('searchInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                performSearch();
-            }
-        });
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
     </script>
 </body>
 </html>

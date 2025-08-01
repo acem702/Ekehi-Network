@@ -7,180 +7,118 @@
     <title>Ekehi Network - Testnet Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
-        .dashboard-card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 8px 25px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-        }
-        .dashboard-card:hover {
-            transform: translateY(-5px);
-        }
-        .metric-card {
-            background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-        }
-        .status-online {
-            color: #28a745;
-        }
-        .status-offline {
-            color: #dc3545;
-        }
-        .navbar-brand {
-            font-weight: bold;
-            font-size: 1.5rem;
-        }
-        .table-dark th {
-            border-color: #495057;
-        }
-        .btn-custom {
-            border-radius: 25px;
-            padding: 8px 20px;
-        }
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .dashboard-card { border: none; border-radius: 15px; box-shadow: 0 8px 25px rgba(0,0,0,0.15); margin-bottom: 20px; transition: transform 0.3s; }
+        .dashboard-card:hover { transform: translateY(-5px); }
+        .metric-value { font-size: 2.5rem; font-weight: bold; color: #2c3e50; }
+        .metric-label { color: #7f8c8d; font-size: 0.9rem; }
+        .status-indicator { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .status-active { background-color: #27ae60; }
+        .status-inactive { background-color: #e74c3c; }
+        .auto-refresh { position: fixed; top: 20px; right: 20px; z-index: 1000; }
+        .block-item, .tx-item { background: #f8f9fa; border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 4px solid #007bff; }
+        .hash-display { font-family: 'Courier New', monospace; font-size: 0.85rem; }
     </style>
 </head>
 <body>
+    <!-- Auto-refresh indicator -->
+    <div class="auto-refresh">
+        <span class="badge bg-primary">
+            <i class="fas fa-sync-alt" id="refreshIcon"></i> Auto-refresh: <span id="refreshTimer">10</span>s
+        </span>
+    </div>
+
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
         <div class="container">
-            <a class="navbar-brand" href="#">
-                <i class="fas fa-cube me-2"></i>Ekehi Network Testnet
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-tachometer-alt me-2"></i>Ekehi Network Dashboard
             </a>
             <div class="navbar-nav ms-auto">
-                <span class="navbar-text">
-                    <i class="fas fa-circle status-online"></i> Node Online
-                </span>
+                <a class="nav-link" href="/block-explorer"><i class="fas fa-search"></i> Explorer</a>
+                <a class="nav-link" href="/api/docs"><i class="fas fa-book"></i> API Docs</a>
             </div>
         </div>
     </nav>
 
     <div class="container mt-4">
-        <!-- Network Stats Row -->
+        <!-- Network Status Row -->
         <div class="row mb-4">
             <div class="col-md-3 mb-3">
-                <div class="card dashboard-card metric-card">
-                    <div class="card-body text-center">
-                        <i class="fas fa-cubes fa-2x mb-2"></i>
-                        <h3 id="totalBlocks">-</h3>
-                        <p class="mb-0">Total Blocks</p>
+                <div class="card dashboard-card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-cubes fa-2x text-primary mb-2"></i>
+                        <div class="metric-value" id="totalBlocks">-</div>
+                        <div class="metric-label">Total Blocks</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card dashboard-card metric-card">
-                    <div class="card-body text-center">
-                        <i class="fas fa-exchange-alt fa-2x mb-2"></i>
-                        <h3 id="totalTransactions">-</h3>
-                        <p class="mb-0">Transactions</p>
+                <div class="card dashboard-card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-coins fa-2x text-warning mb-2"></i>
+                        <div class="metric-value" id="totalSupply">-</div>
+                        <div class="metric-label">Total Supply (EKH)</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card dashboard-card metric-card">
-                    <div class="card-body text-center">
-                        <i class="fas fa-network-wired fa-2x mb-2"></i>
-                        <h3 id="networkNodes">-</h3>
-                        <p class="mb-0">Network Peers</p>
+                <div class="card dashboard-card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-exchange-alt fa-2x text-success mb-2"></i>
+                        <div class="metric-value" id="totalTx">-</div>
+                        <div class="metric-label">Transactions</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3 mb-3">
-                <div class="card dashboard-card metric-card">
-                    <div class="card-body text-center">
-                        <i class="fas fa-coins fa-2x mb-2"></i>
-                        <h3 id="totalSupply">-</h3>
-                        <p class="mb-0">EKH Supply</p>
+                <div class="card dashboard-card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-network-wired fa-2x text-info mb-2"></i>
+                        <div class="metric-value" id="networkNodes">-</div>
+                        <div class="metric-label">Network Nodes</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Dashboard Row -->
+        <!-- Main Content Row -->
         <div class="row">
             <!-- Left Column -->
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <!-- Mining Status -->
                 <div class="card dashboard-card mb-4">
                     <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="fas fa-pickaxe me-2"></i>Mining Status</h5>
+                        <h5 class="mb-0"><i class="fas fa-hammer me-2"></i>Mining Status</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
-                            <div class="col-md-6">
-                                <p><strong>Auto Mining:</strong> <span id="autoMining" class="badge bg-success">Active</span></p>
-                                <p><strong>Current Mining:</strong> <span id="isMining" class="badge bg-warning">Idle</span></p>
+                            <div class="col-6">
+                                <p><strong>Auto-Mining:</strong> <span class="status-indicator" id="miningIndicator"></span><span id="miningStatus">-</span></p>
                                 <p><strong>Difficulty:</strong> <span id="difficulty">-</span></p>
-                            </div>
-                            <div class="col-md-6">
-                                <p><strong>Mining Reward:</strong> <span id="miningReward">-</span> EKH</p>
-                                <p><strong>Pending TX:</strong> <span id="pendingTransactions">-</span></p>
                                 <p><strong>Hash Rate:</strong> <span id="hashRate">-</span> H/s</p>
+                            </div>
+                            <div class="col-6">
+                                <p><strong>Pending TX:</strong> <span id="pendingTx">-</span></p>
+                                <p><strong>Block Time:</strong> <span id="avgBlockTime">-</span>s</p>
+                                <p><strong>Reward:</strong> <span id="miningReward">-</span> EKH</p>
                             </div>
                         </div>
                         <div class="mt-3">
-                            <button class="btn btn-success btn-custom me-2" onclick="startMining()">
+                            <button class="btn btn-success btn-sm me-2" onclick="startMining()">
                                 <i class="fas fa-play"></i> Start Mining
                             </button>
-                            <button class="btn btn-danger btn-custom me-2" onclick="stopMining()">
+                            <button class="btn btn-danger btn-sm" onclick="stopMining()">
                                 <i class="fas fa-stop"></i> Stop Mining
                             </button>
-                            <button class="btn btn-info btn-custom" onclick="discoverPeers()">
-                                <i class="fas fa-search"></i> Discover Peers
-                            </button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Recent Blocks -->
-                <div class="card dashboard-card mb-4">
-                    <div class="card-header bg-dark text-white">
-                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Recent Blocks</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-dark table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>Block #</th>
-                                        <th>Hash</th>
-                                        <th>Transactions</th>
-                                        <th>Difficulty</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recentBlocks">
-                                    <!-- Dynamic content -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Right Column -->
-            <div class="col-lg-4">
                 <!-- Network Info -->
                 <div class="card dashboard-card mb-4">
                     <div class="card-header bg-info text-white">
-                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Network Info</h5>
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Network Information</h5>
                     </div>
                     <div class="card-body">
                         <p><strong>Network:</strong> <span id="networkName">-</span></p>
@@ -197,9 +135,9 @@
                         <h5 class="mb-0"><i class="fas fa-faucet me-2"></i>Testnet Faucet</h5>
                     </div>
                     <div class="card-body">
-                        <p class="small text-muted">Get free EKH tokens for testing</p>
+                        <p class="small text-muted">Get free EKH tokens for testing (100 EKH per request, 1 hour cooldown)</p>
                         <div class="input-group mb-3">
-                            <input type="text" class="form-control" id="faucetAddress" placeholder="EKH address...">
+                            <input type="text" class="form-control" id="faucetAddress" placeholder="EKH address..." maxlength="51">
                             <button class="btn btn-warning" onclick="requestFaucet()">
                                 <i class="fas fa-coins"></i> Request 100 EKH
                             </button>
@@ -210,63 +148,62 @@
 
                 <!-- Wallet Generator -->
                 <div class="card dashboard-card mb-4">
-                    <div class="card-header bg-success text-white">
+                    <div class="card-header bg-secondary text-white">
                         <h5 class="mb-0"><i class="fas fa-wallet me-2"></i>Wallet Generator</h5>
                     </div>
                     <div class="card-body">
-                        <button class="btn btn-success w-100 mb-3" onclick="generateWallet()">
+                        <p class="small text-muted">Generate a new EKH wallet address</p>
+                        <button class="btn btn-secondary" onclick="createWallet()">
                             <i class="fas fa-plus"></i> Generate New Wallet
                         </button>
-                        <div id="walletResult" class="small"></div>
-                    </div>
-                </div>
-
-                <!-- Quick Actions -->
-                <div class="card dashboard-card">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="d-grid gap-2">
-                            <button class="btn btn-outline-primary" onclick="window.open('/block-explorer', '_blank')">
-                                <i class="fas fa-search"></i> Block Explorer
-                            </button>
-                            <button class="btn btn-outline-info" onclick="window.open('/api/docs', '_blank')">
-                                <i class="fas fa-book"></i> API Documentation
-                            </button>
-                            <button class="btn btn-outline-warning" onclick="restartNode()">
-                                <i class="fas fa-redo"></i> Restart Node
-                            </button>
-                        </div>
+                        <div id="walletResult" class="mt-2"></div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Recent Transactions -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="card dashboard-card">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Recent Transactions</h5>
+            <!-- Right Column -->
+            <div class="col-lg-6">
+                <!-- Recent Blocks -->
+                <div class="card dashboard-card mb-4">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-cube me-2"></i>Recent Blocks</h5>
+                    </div>
+                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                        <div id="recentBlocks">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading blocks...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Transactions -->
+                <div class="card dashboard-card mb-4">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Pending Transactions</h5>
+                    </div>
+                    <div class="card-body" style="max-height: 350px; overflow-y: auto;">
+                        <div id="recentTransactions">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-spinner fa-spin"></i> Loading transactions...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Node Controls -->
+                <div class="card dashboard-card mb-4">
+                    <div class="card-header bg-danger text-white">
+                        <h5 class="mb-0"><i class="fas fa-cogs me-2"></i>Node Management</h5>
                     </div>
                     <div class="card-body">
-                        <div class="table-responsive">
-                            <table class="table table-striped">
-                                <thead>
-                                    <tr>
-                                        <th>TX ID</th>
-                                        <th>Amount</th>
-                                        <th>From</th>
-                                        <th>To</th>
-                                        <th>Time</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="recentTransactions">
-                                    <!-- Dynamic content -->
-                                </tbody>
-                            </table>
-                        </div>
+                        <p class="small text-muted">Manage node services and processes</p>
+                        <button class="btn btn-danger btn-sm" onclick="restartNode()">
+                            <i class="fas fa-restart"></i> Restart Node
+                        </button>
+                        <button class="btn btn-info btn-sm ms-2" onclick="loadDashboardData()">
+                            <i class="fas fa-refresh"></i> Refresh Data
+                        </button>
                     </div>
                 </div>
             </div>
@@ -275,80 +212,130 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let dashboardData = {};
+        let refreshInterval;
+        let refreshCountdown = 10;
 
-        // Initialize dashboard
         document.addEventListener('DOMContentLoaded', function() {
             loadDashboardData();
-            setInterval(loadDashboardData, 10000); // Refresh every 10 seconds
+            startAutoRefresh();
         });
+
+        function startAutoRefresh() {
+            refreshInterval = setInterval(() => {
+                refreshCountdown--;
+                document.getElementById('refreshTimer').textContent = refreshCountdown;
+                
+                if (refreshCountdown <= 0) {
+                    loadDashboardData();
+                    refreshCountdown = 10;
+                    // Spin refresh icon
+                    const icon = document.getElementById('refreshIcon');
+                    icon.style.animation = 'spin 1s linear';
+                    setTimeout(() => icon.style.animation = '', 1000);
+                }
+            }, 1000);
+        }
 
         async function loadDashboardData() {
             try {
                 const response = await fetch('/api/dashboard/data');
-                dashboardData = await response.json();
-                updateDashboard();
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                
+                if (!data.isReady) {
+                    throw new Error(data.message || 'Dashboard not ready');
+                }
+                
+                updateDashboard(data);
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
+                showAlert('Failed to load dashboard data: ' + error.message, 'danger');
             }
         }
 
-        function updateDashboard() {
-            const data = dashboardData;
-            
-            // Update metrics
-            document.getElementById('totalBlocks').textContent = data.stats?.totalBlocks || '-';
-            document.getElementById('totalTransactions').textContent = data.stats?.totalTransactions || '-';
-            document.getElementById('networkNodes').textContent = data.networkNodes || '-';
-            document.getElementById('totalSupply').textContent = (data.stats?.totalSupply || 0).toFixed(2);
-            
-            // Update mining status
-            document.getElementById('autoMining').textContent = data.stats?.autoMining ? 'Active' : 'Inactive';
-            document.getElementById('autoMining').className = data.stats?.autoMining ? 'badge bg-success' : 'badge bg-danger';
-            document.getElementById('isMining').textContent = data.stats?.isMining ? 'Mining' : 'Idle';
-            document.getElementById('isMining').className = data.stats?.isMining ? 'badge bg-success' : 'badge bg-warning';
-            document.getElementById('difficulty').textContent = data.stats?.difficulty || '-';
-            document.getElementById('miningReward').textContent = data.stats?.miningReward || '-';
-            document.getElementById('pendingTransactions').textContent = data.stats?.pendingTransactions || '-';
-            document.getElementById('hashRate').textContent = (data.metrics?.hashRate || 0).toFixed(2);
-            
-            // Update network info
-            document.getElementById('networkName').textContent = data.network?.name || '-';
-            document.getElementById('tokenInfo').textContent = `${data.network?.token?.name} (${data.network?.token?.symbol})` || '-';
-            document.getElementById('version').textContent = data.network?.version || '-';
-            document.getElementById('blockTime').textContent = (data.network?.blockTime / 1000) || '-';
-            document.getElementById('uptime').textContent = formatDuration(data.metrics?.uptime || 0);
-            
-            // Update recent blocks
-            updateRecentBlocks(data.recentBlocks || []);
-            
-            // Update recent transactions
-            updateRecentTransactions(data.recentTransactions || []);
+        function updateDashboard(data) {
+            try {
+                // Update metrics
+                document.getElementById('totalBlocks').textContent = data.stats?.totalBlocks || 0;
+                document.getElementById('totalSupply').textContent = (data.stats?.totalSupply || 0).toFixed(1);
+                document.getElementById('totalTx').textContent = data.stats?.totalTransactions || 0;
+                document.getElementById('networkNodes').textContent = data.stats?.networkNodes || 0;
+                
+                // Update mining status
+                const isMining = data.stats?.autoMining;
+                document.getElementById('miningStatus').textContent = isMining ? 'Active' : 'Inactive';
+                const indicator = document.getElementById('miningIndicator');
+                indicator.className = `status-indicator ${isMining ? 'status-active' : 'status-inactive'}`;
+                
+                document.getElementById('difficulty').textContent = data.stats?.difficulty || 0;
+                document.getElementById('hashRate').textContent = (data.metrics?.hashRate || 0).toFixed(2);
+                document.getElementById('pendingTx').textContent = data.stats?.pendingTransactions || 0;
+                document.getElementById('avgBlockTime').textContent = (data.stats?.averageBlockTime / 1000 || 0).toFixed(1);
+                document.getElementById('miningReward').textContent = data.stats?.miningReward || 0;
+                
+                // Update network info
+                document.getElementById('networkName').textContent = data.network?.name || 'Unknown';
+                document.getElementById('tokenInfo').textContent = `${data.network?.token?.name || 'Unknown'} (${data.network?.token?.symbol || 'N/A'})`;
+                document.getElementById('version').textContent = data.network?.version || '1.0.0';
+                document.getElementById('blockTime').textContent = (data.network?.blockTime / 1000 || 0).toFixed(0);
+                document.getElementById('uptime').textContent = formatDuration(data.metrics?.uptime || 0);
+                
+                // Update recent blocks
+                updateRecentBlocks(data.recentBlocks || []);
+                
+                // Update recent transactions
+                updateRecentTransactions(data.recentTransactions || []);
+                
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+            }
         }
 
         function updateRecentBlocks(blocks) {
-            const tbody = document.getElementById('recentBlocks');
-            tbody.innerHTML = blocks.map(block => `
-                <tr>
-                    <td>#${block.index}</td>
-                    <td><code>${block.hash}</code></td>
-                    <td>${block.transactions}</td>
-                    <td>${block.difficulty}</td>
-                    <td>${formatTime(block.timestamp)}</td>
-                </tr>
+            const container = document.getElementById('recentBlocks');
+            if (!blocks.length) {
+                container.innerHTML = '<div class="text-center text-muted">No blocks available</div>';
+                return;
+            }
+            
+            container.innerHTML = blocks.reverse().map(block => `
+                <div class="block-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Block #${block.index}</strong>
+                            <br><span class="hash-display text-muted">${block.hash}</span>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted">${formatTime(block.timestamp)}</small>
+                            <br><span class="badge bg-primary">${block.transactions} TXs</span>
+                        </div>
+                    </div>
+                </div>
             `).join('');
         }
 
         function updateRecentTransactions(transactions) {
-            const tbody = document.getElementById('recentTransactions');
-            tbody.innerHTML = transactions.map(tx => `
-                <tr>
-                    <td><code>${tx.id}</code></td>
-                    <td>${tx.amount} EKH</td>
-                    <td><code>${tx.sender}</code></td>
-                    <td><code>${tx.recipient}</code></td>
-                    <td>${formatTime(tx.timestamp)}</td>
-                </tr>
+            const container = document.getElementById('recentTransactions');
+            if (!transactions.length) {
+                container.innerHTML = '<div class="text-center text-muted">No pending transactions</div>';
+                return;
+            }
+            
+            container.innerHTML = transactions.map(tx => `
+                <div class="tx-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${tx.amount} EKH</strong>
+                            <br><small class="text-muted">${tx.sender} → ${tx.recipient}</small>
+                        </div>
+                        <div class="text-end">
+                            <small class="text-muted">${formatTime(tx.timestamp)}</small>
+                            <br><span class="badge bg-secondary">Fee: ${tx.fee} EKH</span>
+                        </div>
+                    </div>
+                </div>
             `).join('');
         }
 
@@ -356,8 +343,8 @@
             try {
                 const response = await fetch('/mining/start', { method: 'POST' });
                 const result = await response.json();
-                showAlert(result.message, 'success');
-                loadDashboardData();
+                showAlert(result.message || 'Mining started', 'success');
+                setTimeout(loadDashboardData, 1000);
             } catch (error) {
                 showAlert('Failed to start mining', 'danger');
             }
@@ -367,45 +354,43 @@
             try {
                 const response = await fetch('/mining/stop', { method: 'POST' });
                 const result = await response.json();
-                showAlert(result.message, 'warning');
-                loadDashboardData();
+                showAlert(result.message || 'Mining stopped', 'warning');
+                setTimeout(loadDashboardData, 1000);
             } catch (error) {
                 showAlert('Failed to stop mining', 'danger');
             }
         }
 
-        async function discoverPeers() {
-            try {
-                const response = await fetch('/api/network/discover', { method: 'POST' });
-                const result = await response.json();
-                showAlert(result.message, 'info');
-                loadDashboardData();
-            } catch (error) {
-                showAlert('Peer discovery failed', 'danger');
-            }
-        }
-
-        async function generateWallet() {
+        async function createWallet() {
             try {
                 const response = await fetch('/wallet/create');
                 const result = await response.json();
+                
                 document.getElementById('walletResult').innerHTML = `
                     <div class="alert alert-success">
                         <strong>New Wallet Created!</strong><br>
                         <small>Address: <code>${result.wallet.address}</code></small>
+                        <br><button class="btn btn-sm btn-outline-success mt-2" onclick="copyToClipboard('${result.wallet.address}')">
+                            <i class="fas fa-copy"></i> Copy Address
+                        </button>
                     </div>
                 `;
             } catch (error) {
                 document.getElementById('walletResult').innerHTML = `
-                    <div class="alert alert-danger">Failed to create wallet</div>
+                    <div class="alert alert-danger">Failed to create wallet: ${error.message}</div>
                 `;
             }
         }
 
         async function requestFaucet() {
-            const address = document.getElementById('faucetAddress').value;
+            const address = document.getElementById('faucetAddress').value.trim();
             if (!address) {
                 showAlert('Please enter a valid EKH address', 'warning');
+                return;
+            }
+
+            if (!address.startsWith('EKH') || address.length !== 51) {
+                showAlert('Invalid EKH address format. Must start with EKH and be 51 characters long.', 'warning');
                 return;
             }
 
@@ -420,18 +405,24 @@
                 if (result.success) {
                     document.getElementById('faucetResult').innerHTML = `
                         <div class="alert alert-success">
-                            ${result.message}<br>
-                            <small>TX: ${result.transaction}</small>
+                            <strong>Success!</strong> ${result.message}<br>
+                            <small>Transaction ID: <code>${result.transaction}</code></small><br>
+                            <small>Estimated confirmation: ${result.estimatedConfirmation}</small>
                         </div>
                     `;
+                    document.getElementById('faucetAddress').value = '';
                 } else {
                     document.getElementById('faucetResult').innerHTML = `
-                        <div class="alert alert-danger">${result.error}</div>
+                        <div class="alert alert-danger">
+                            <strong>Error:</strong> ${result.error}
+                        </div>
                     `;
                 }
             } catch (error) {
                 document.getElementById('faucetResult').innerHTML = `
-                    <div class="alert alert-danger">Faucet request failed</div>
+                    <div class="alert alert-danger">
+                        <strong>Error:</strong> Faucet request failed: ${error.message}
+                    </div>
                 `;
             }
         }
@@ -447,6 +438,12 @@
             } catch (error) {
                 showAlert('Failed to restart node', 'danger');
             }
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                showAlert('Address copied to clipboard!', 'success');
+            });
         }
 
         function formatTime(timestamp) {
@@ -466,7 +463,6 @@
         }
 
         function showAlert(message, type) {
-            // Create and show bootstrap alert
             const alertDiv = document.createElement('div');
             alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
             alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; max-width: 400px;';
@@ -476,7 +472,6 @@
             `;
             document.body.appendChild(alertDiv);
             
-            // Auto-remove after 5 seconds
             setTimeout(() => {
                 if (alertDiv.parentNode) {
                     alertDiv.parentNode.removeChild(alertDiv);
