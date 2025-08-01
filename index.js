@@ -4,6 +4,8 @@ import Blockchain from "./blockchain.js";
 import { v4 as uuidv4 } from 'uuid';
 import rp from "request-promise";
 import path from "path";
+import fs from "fs";
+
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
@@ -54,7 +56,7 @@ app.get("/api/explorer/data", async (req, res) => {
     // Get recent blocks (latest first)
     const recentBlocks = bitcoin.chain.slice().reverse().slice(0, 20);
     const allTransactions = [];
-    
+
     bitcoin.chain.forEach(block => {
       if (block.transactions && Array.isArray(block.transactions)) {
         block.transactions.forEach(tx => {
@@ -67,12 +69,12 @@ app.get("/api/explorer/data", async (req, res) => {
         });
       }
     });
-    
+
     // Sort transactions by timestamp (latest first)
     const recentTransactions = allTransactions
       .sort((a, b) => (b.timestamp || b.blockTimestamp || 0) - (a.timestamp || a.blockTimestamp || 0))
       .slice(0, 50);
-    
+
     res.json({
       blocks: recentBlocks.map(block => ({
         index: block.index || 0,
@@ -129,12 +131,12 @@ app.get("/blockchain", (req, res) => {
 app.post("/transaction", async (req, res) => {
   try {
     const newTransaction = req.body;
-    
+
     // Validate transaction structure
     if (!newTransaction.amount || !newTransaction.sender || !newTransaction.recipient) {
       return res.status(400).json({ error: 'Invalid transaction data' });
     }
-    
+
     const blockIndex = await bitcoin.addTransactionToPendingTransactions(newTransaction);
     res.json({
       note: `Transaction will be added in block ${blockIndex}`,
@@ -156,17 +158,17 @@ app.get("/mine", async (req, res) => {
       transactions: bitcoin.pendingTransactions.slice(0, bitcoin.maxTransactionsPerBlock),
       index: lastBlock["index"] + 1,
     };
-    
+
     console.log('Starting mining process...');
     const nonce = bitcoin.proofOfWork(previousBlockHash, currentBlockData);
     const blockHash = bitcoin.hashBlock(previousBlockHash, currentBlockData, nonce);
-    
+
     const nodeAddress = uuidv4().split("-").join("");
     const newBlock = await bitcoin.createNewBlock(nonce, previousBlockHash, blockHash);
-    
+
     // Adjust difficulty for next block
     bitcoin.adjustDifficulty();
-    
+
     const requestPromises = [];
 
     bitcoin.networkNodes.forEach((networkNodeUrl) => {
@@ -191,9 +193,9 @@ app.get("/mine", async (req, res) => {
           "00",
           nodeAddress
         );
-        
+
         await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
-        
+
         const requestOptions = {
           uri: bitcoin.currentNodeUrl + "/transaction/broadcast",
           method: "POST",
@@ -229,13 +231,13 @@ app.get("/mine", async (req, res) => {
 app.post("/register-and-broadcast-node", async (req, res) => {
   try {
     const newNodeUrl = req.body.newNodeUrl;
-    
+
     if (!newNodeUrl) {
       return res.status(400).json({ error: 'Node URL is required' });
     }
-    
+
     await bitcoin.addNetworkNode(newNodeUrl);
-    
+
     const regNodesPromise = [];
     bitcoin.networkNodes.forEach((networkNodeUrl) => {
       if (networkNodeUrl !== newNodeUrl) {
@@ -256,7 +258,7 @@ app.post("/register-and-broadcast-node", async (req, res) => {
     });
 
     await Promise.all(regNodesPromise);
-    
+
     const bulkRegisterOptions = {
       uri: newNodeUrl + "/register-nodes-bulk",
       method: "POST",
@@ -266,11 +268,11 @@ app.post("/register-and-broadcast-node", async (req, res) => {
       json: true,
       timeout: 5000
     };
-    
+
     await rp(bulkRegisterOptions).catch(err => {
       console.error(`Failed bulk registration with ${newNodeUrl}:`, err.message);
     });
-    
+
     res.json({
       note: "New Node registered with network successfully",
       networkSize: bitcoin.networkNodes.length
@@ -459,11 +461,11 @@ app.get("/ecosystem", (req, res) => {
 app.post("/api/wallet/recover", (req, res) => {
   try {
     const { privateKey } = req.body;
-    
+
     if (!privateKey) {
       return res.status(400).json({ error: 'Private key is required' });
     }
-    
+
     const wallet = bitcoin.recoverWalletFromPrivateKey(privateKey);
     res.json({
       success: true,
@@ -502,7 +504,7 @@ app.post("/mining/start", (req, res) => {
 app.post("/api/rewards/claim", async (req, res) => {
   try {
     const { address, activity } = req.body;
-    
+
     if (!address || !bitcoin.isValidAddress(address)) {
       return res.status(400).json({ error: 'Valid EKH address required' });
     }
@@ -530,7 +532,7 @@ app.post("/api/rewards/claim", async (req, res) => {
       const alreadyClaimed = addressData.addressTransactions.some(tx => 
         tx.sender === 'ECOSYSTEM' && tx.activityType === activity
       );
-      
+
       if (alreadyClaimed) {
         return res.status(429).json({ error: 'Reward already claimed for this activity' });
       }
@@ -543,7 +545,7 @@ app.post("/api/rewards/claim", async (req, res) => {
         tx.activityType === activity && 
         new Date(tx.timestamp).toDateString() === today
       );
-      
+
       if (claimedToday) {
         return res.status(429).json({ 
           error: `${reward.description} reward already claimed today` 
@@ -563,9 +565,9 @@ app.post("/api/rewards/claim", async (req, res) => {
       activityType: activity,
       description: reward.description
     };
-    
+
     await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
-    
+
     res.json({
       success: true,
       amount: reward.amount,
@@ -583,13 +585,13 @@ app.post("/api/rewards/claim", async (req, res) => {
 app.post("/api/rewards/auto-claim", async (req, res) => {
   try {
     const { address, activities } = req.body;
-    
+
     if (!address || !bitcoin.isValidAddress(address)) {
       return res.status(400).json({ error: 'Valid EKH address required' });
     }
 
     const claimedRewards = [];
-    
+
     for (const activity of activities) {
       try {
         const response = await fetch(`${req.protocol}://${req.get('host')}/api/rewards/claim`, {
@@ -601,7 +603,7 @@ app.post("/api/rewards/auto-claim", async (req, res) => {
 
 
 
-        
+
         if (response.ok) {
           const result = await response.json();
           claimedRewards.push(result);
@@ -610,7 +612,7 @@ app.post("/api/rewards/auto-claim", async (req, res) => {
         console.log(`Failed to claim ${activity}:`, error.message);
       }
     }
-    
+
     res.json({
       success: true,
       claimed: claimedRewards,
@@ -647,18 +649,18 @@ app.get("/mining/status", (req, res) => {
 app.post("/transaction/send", async (req, res) => {
   try {
     const { amount, sender, recipient, fee } = req.body;
-    
+
     if (!bitcoin.isValidAddress(sender) || !bitcoin.isValidAddress(recipient)) {
       return res.status(400).json({ error: 'Invalid wallet address format' });
     }
-    
+
     if (!amount || !sender || !recipient) {
       return res.status(400).json({ error: 'Amount, sender, and recipient are required' });
     }
-    
+
     const newTransaction = bitcoin.createNewTransaction(amount, sender, recipient, fee);
     const blockIndex = await bitcoin.addTransactionToPendingTransactions(newTransaction);
-    
+
     res.json({
       success: true,
       transaction: newTransaction,
@@ -684,7 +686,7 @@ app.get("/mempool", (req, res) => {
 app.get("/richlist", (req, res) => {
   try {
     const addresses = new Set();
-    
+
     // Collect all addresses
     bitcoin.chain.forEach(block => {
       block.transactions.forEach(tx => {
@@ -692,7 +694,7 @@ app.get("/richlist", (req, res) => {
         addresses.add(tx.recipient);
       });
     });
-    
+
     // Calculate balances and sort
     const addressBalances = Array.from(addresses)
       .map(address => ({
@@ -702,7 +704,7 @@ app.get("/richlist", (req, res) => {
       .filter(data => data.addressBalance > 0)
       .sort((a, b) => b.addressBalance - a.addressBalance)
       .slice(0, 50); // Top 50
-    
+
     res.json({
       richList: addressBalances,
       totalAddresses: addresses.size,
@@ -717,7 +719,7 @@ app.get("/richlist", (req, res) => {
 app.post("/api/ecosystem/claim-reward", async (req, res) => {
   try {
     const { address, activity } = req.body;
-    
+
     if (!address || !bitcoin.isValidAddress(address)) {
       return res.status(400).json({ error: 'Valid EKH address required' });
     }
@@ -742,7 +744,7 @@ app.post("/api/ecosystem/claim-reward", async (req, res) => {
       const alreadyClaimed = addressData.addressTransactions.some(tx => 
         tx.sender === 'ECOSYSTEM' && tx.activity === activity
       );
-      
+
       if (alreadyClaimed) {
         return res.status(429).json({ error: 'Reward already claimed for this activity' });
       }
@@ -755,7 +757,7 @@ app.post("/api/ecosystem/claim-reward", async (req, res) => {
         tx.activity === activity && 
         new Date(tx.timestamp).toDateString() === today
       );
-      
+
       if (claimedToday) {
         return res.status(429).json({ error: 'Daily reward already claimed today' });
       }
@@ -772,9 +774,9 @@ app.post("/api/ecosystem/claim-reward", async (req, res) => {
       network: bitcoin.networkName,
       activity: activity
     };
-    
+
     await bitcoin.addTransactionToPendingTransactions(rewardTransaction);
-    
+
     res.json({
       success: true,
       amount: rewardAmount,
@@ -825,7 +827,7 @@ app.get("/api/dashboard/data", async (req, res) => {
     // Get recent blocks (latest first)
     const recentBlocks = bitcoin.chain.slice().reverse().slice(0, 10);
     const recentPendingTx = bitcoin.pendingTransactions ? bitcoin.pendingTransactions.slice().reverse().slice(0, 20) : [];
-    
+
     const dashboardData = {
       network: bitcoin.getNetworkInfo(),
       stats: bitcoin.getStats(),
@@ -853,7 +855,7 @@ app.get("/api/dashboard/data", async (req, res) => {
       mempoolSize: bitcoin.pendingTransactions ? bitcoin.pendingTransactions.length : 0,
       isReady: true
     };
-    
+
     res.json(dashboardData);
   } catch (error) {
     console.error('Dashboard data error:', error);
@@ -896,7 +898,7 @@ app.post("/api/node/restart", (req, res) => {
       bitcoin.startPeerDiscovery();
       bitcoin.startMetricsCollection();
     }, 1000);
-    
+
     res.json({ message: 'Node services restarted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to restart node', message: error.message });
@@ -931,30 +933,30 @@ app.post("/api/network/discover", async (req, res) => {
 app.post("/api/faucet/request", async (req, res) => {
   try {
     const { address } = req.body;
-    
+
     if (!address || typeof address !== 'string') {
       return res.status(400).json({ error: 'Address is required' });
     }
-    
+
     if (!bitcoin.isValidAddress(address)) {
       return res.status(400).json({ error: 'Invalid EKH address format. Address must start with EKH' });
     }
-    
+
     // Check if address already received faucet tokens recently
     const addressData = bitcoin.getAddressData(address);
     const recentFaucetTx = addressData.addressTransactions.find(tx => 
       tx.sender === 'FAUCET' && (Date.now() - tx.timestamp) < 3600000 // 1 hour
     );
-    
+
     if (recentFaucetTx) {
       return res.status(429).json({ 
         error: 'Faucet limit reached. Try again in 1 hour.',
         nextRequestTime: new Date(recentFaucetTx.timestamp + 3600000).toISOString()
       });
     }
-    
+
     const faucetAmount = 100; // 100 EKH
-    
+
     // Create faucet transaction with special sender
     const faucetTransaction = {
       amount: faucetAmount,
@@ -965,9 +967,9 @@ app.post("/api/faucet/request", async (req, res) => {
       timestamp: Date.now(),
       network: bitcoin.networkName
     };
-    
+
     await bitcoin.addTransactionToPendingTransactions(faucetTransaction);
-    
+
     res.json({
       success: true,
       amount: faucetAmount,
@@ -1016,6 +1018,85 @@ app.get("/api/docs", (req, res) => {
     }
   });
 });
+
+// Serve static files for contracts page
+app.use('/contracts', express.static(path.join(__dirname, 'contracts')));
+
+// Route to serve the contracts page
+app.get("/contracts", (req, res) => {
+    res.sendFile(path.join(__dirname, 'contracts', 'index.html'));
+});
+
+// Create a basic contracts directory if it doesn't exist
+const contractsDir = path.join(__dirname, 'contracts');
+if (!fs.existsSync(contractsDir)){
+    fs.mkdirSync(contractsDir);
+
+    // Create a basic index.html if it doesn't exist
+    const indexFile = path.join(contractsDir, 'index.html');
+    if (!fs.existsSync(indexFile)) {
+        fs.writeFileSync(indexFile, `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Contracts</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css">
+    <style>
+        body { padding-top: 50px; }
+        .nav-link { padding: 0.5rem 1rem; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+        <a class="navbar-brand" href="/">Ekehi Network</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarsExampleDefault">
+            <ul class="navbar-nav mr-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="/">
+                        <i class="fas fa-home"></i> Home
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/dashboard">
+                        <i class="fas fa-chart-line"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/block-explorer">
+                        <i class="fas fa-search"></i> Explorer
+                    </a>
+                    <a class="nav-link" href="/contracts">
+                        <i class="fas fa-code"></i> Contracts
+                    </a>
+                    <a class="nav-link" href="/api/docs">
+                        <i class="fas fa-book"></i> API Docs
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <main role="main" class="container">
+        <h1>Smart Contracts</h1>
+        <p>This is where you can deploy and interact with smart contracts on the Ekehi Network.</p>
+        <button class="btn btn-primary">Deploy Contract</button>
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
+        `);
+    }
+}
 
 app.listen(port, '0.0.0.0', () => {
   console.log('🚀 ===================================');

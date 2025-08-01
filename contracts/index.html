@@ -1,0 +1,545 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Contracts - Ekehi Network</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .navbar {
+            background: rgba(0, 0, 0, 0.1) !important;
+            backdrop-filter: blur(10px);
+        }
+        
+        .contract-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            border: none;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+        
+        .contract-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+        
+        .code-editor {
+            background: #2d3748;
+            border-radius: 10px;
+            border: none;
+            color: #e2e8f0;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            min-height: 300px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn-outline-primary {
+            border: 2px solid #667eea;
+            color: #667eea;
+            border-radius: 10px;
+            padding: 10px 25px;
+            font-weight: 600;
+        }
+        
+        .template-card {
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            border: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        
+        .template-card:hover {
+            background: rgba(255, 255, 255, 1);
+            transform: translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        
+        .contract-result {
+            background: rgba(40, 167, 69, 0.1);
+            border: 1px solid rgba(40, 167, 69, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .contract-error {
+            background: rgba(220, 53, 69, 0.1);
+            border: 1px solid rgba(220, 53, 69, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+        }
+        
+        .hero-banner {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px 20px;
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        
+        .stats-row {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/">
+                <i class="fas fa-cube me-2"></i>Ekehi Smart Contracts
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/ecosystem">
+                    <i class="fas fa-home"></i> Home
+                </a>
+                <a class="nav-link" href="/dashboard">
+                    <i class="fas fa-tachometer-alt"></i> Dashboard
+                </a>
+                <a class="nav-link" href="/block-explorer">
+                    <i class="fas fa-search"></i> Explorer
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Banner -->
+    <div class="container mt-4">
+        <div class="hero-banner">
+            <h1 class="display-4 mb-3">
+                <i class="fas fa-code me-3"></i>Smart Contracts
+            </h1>
+            <p class="lead mb-4">
+                Deploy and interact with smart contracts on the Ekehi Network
+            </p>
+            <div class="stats-row">
+                <div class="stat-item">
+                    <div class="stat-number" id="totalContracts">0</div>
+                    <div>Total Contracts</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="contractExecs">0</div>
+                    <div>Executions</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="activeContracts">0</div>
+                    <div>Active Contracts</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Deploy Contract Section -->
+        <div class="row mb-5">
+            <div class="col-lg-8">
+                <div class="contract-card card">
+                    <div class="card-body p-4">
+                        <h4 class="card-title mb-4">
+                            <i class="fas fa-rocket me-2 text-primary"></i>Deploy Smart Contract
+                        </h4>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Creator Address</label>
+                            <input type="text" class="form-control" id="creatorAddress" placeholder="Enter your EKH address">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Contract Name (optional)</label>
+                            <input type="text" class="form-control" id="contractName" placeholder="My Contract">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Contract Code</label>
+                            <textarea class="form-control code-editor" id="contractCode" rows="15" placeholder="// Enter your smart contract code here
+function constructor() {
+    context.state.owner = context.caller;
+    context.emit('ContractCreated', { owner: context.caller });
+}
+
+function hello() {
+    return 'Hello, World!';
+}"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Initial Data (JSON, optional)</label>
+                            <textarea class="form-control" id="initialData" rows="3" placeholder='{"key": "value"}'></textarea>
+                        </div>
+                        
+                        <button class="btn btn-primary btn-lg" onclick="deployContract()">
+                            <i class="fas fa-rocket me-2"></i>Deploy Contract
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Contract Templates -->
+            <div class="col-lg-4">
+                <div class="contract-card card">
+                    <div class="card-body p-4">
+                        <h5 class="card-title mb-4">
+                            <i class="fas fa-layer-group me-2 text-success"></i>Templates
+                        </h5>
+                        <div id="contractTemplates">
+                            <!-- Templates will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Execute Contract Section -->
+        <div class="row mb-5">
+            <div class="col-lg-12">
+                <div class="contract-card card">
+                    <div class="card-body p-4">
+                        <h4 class="card-title mb-4">
+                            <i class="fas fa-play me-2 text-success"></i>Execute Contract
+                        </h4>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Contract ID</label>
+                                <input type="text" class="form-control" id="executeContractId" placeholder="CONTRACT_...">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Caller Address</label>
+                                <input type="text" class="form-control" id="callerAddress" placeholder="Your EKH address">
+                            </div>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Method Name</label>
+                                <input type="text" class="form-control" id="methodName" placeholder="hello">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold">Value (EKH, optional)</label>
+                                <input type="number" class="form-control" id="methodValue" placeholder="0" step="0.001">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Parameters (JSON array, optional)</label>
+                            <textarea class="form-control" id="methodParams" rows="2" placeholder='["param1", "param2"]'></textarea>
+                        </div>
+                        
+                        <button class="btn btn-success btn-lg me-2" onclick="executeContract()">
+                            <i class="fas fa-play me-2"></i>Execute
+                        </button>
+                        <button class="btn btn-outline-primary" onclick="getContractInfo()">
+                            <i class="fas fa-info me-2"></i>Get Info
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="row mb-5">
+            <div class="col-lg-12">
+                <div class="contract-card card">
+                    <div class="card-body p-4">
+                        <h4 class="card-title mb-4">
+                            <i class="fas fa-terminal me-2 text-info"></i>Results
+                        </h4>
+                        <div id="contractResults">
+                            <p class="text-muted">Execute a contract or deploy a new one to see results here.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Contracts Section -->
+        <div class="row">
+            <div class="col-lg-12">
+                <div class="contract-card card">
+                    <div class="card-body p-4">
+                        <h4 class="card-title mb-4">
+                            <i class="fas fa-list me-2 text-warning"></i>All Contracts
+                        </h4>
+                        <div id="allContracts">
+                            <!-- Contracts will be loaded here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="mt-5 py-4 text-center text-white">
+        <div class="container">
+            <p>&copy; 2024 Ekehi Network. Smart Contract Platform.</p>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <script>
+        // Load contract templates
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/contracts/templates');
+                const data = await response.json();
+                
+                const templatesDiv = document.getElementById('contractTemplates');
+                templatesDiv.innerHTML = '';
+                
+                Object.entries(data.templates).forEach(([key, template]) => {
+                    const templateCard = document.createElement('div');
+                    templateCard.className = 'template-card card mb-2';
+                    templateCard.innerHTML = `
+                        <div class="card-body p-3">
+                            <h6 class="card-title mb-1">${template.name}</h6>
+                            <p class="card-text small text-muted mb-2">${template.description}</p>
+                            <button class="btn btn-sm btn-outline-primary" onclick="useTemplate('${key}')">
+                                Use Template
+                            </button>
+                        </div>
+                    `;
+                    templatesDiv.appendChild(templateCard);
+                });
+            } catch (error) {
+                console.error('Failed to load templates:', error);
+            }
+        }
+        
+        // Use contract template
+        async function useTemplate(templateKey) {
+            try {
+                const response = await fetch('/api/contracts/templates');
+                const data = await response.json();
+                const template = data.templates[templateKey];
+                
+                if (template) {
+                    document.getElementById('contractCode').value = template.code.trim();
+                    document.getElementById('contractName').value = template.name;
+                }
+            } catch (error) {
+                console.error('Failed to use template:', error);
+            }
+        }
+        
+        // Deploy contract
+        async function deployContract() {
+            const creator = document.getElementById('creatorAddress').value;
+            const code = document.getElementById('contractCode').value;
+            const name = document.getElementById('contractName').value;
+            const initialDataStr = document.getElementById('initialData').value;
+            
+            if (!creator || !code) {
+                showResult('Please enter creator address and contract code', 'error');
+                return;
+            }
+            
+            let initialData = {};
+            if (initialDataStr.trim()) {
+                try {
+                    initialData = JSON.parse(initialDataStr);
+                } catch (e) {
+                    showResult('Invalid JSON in initial data', 'error');
+                    return;
+                }
+            }
+            
+            if (name) {
+                initialData.name = name;
+            }
+            
+            try {
+                const response = await fetch('/api/contracts/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code, creator, initialData })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult(`Contract deployed successfully!<br>
+                               <strong>Contract ID:</strong> ${result.contract.id}<br>
+                               <strong>Creator:</strong> ${result.contract.creator}<br>
+                               <strong>Created:</strong> ${new Date(result.contract.created).toLocaleString()}`, 'success');
+                    loadAllContracts();
+                } else {
+                    showResult(result.error || 'Deployment failed', 'error');
+                }
+            } catch (error) {
+                showResult('Network error: ' + error.message, 'error');
+            }
+        }
+        
+        // Execute contract
+        async function executeContract() {
+            const contractId = document.getElementById('executeContractId').value;
+            const method = document.getElementById('methodName').value;
+            const caller = document.getElementById('callerAddress').value;
+            const value = parseFloat(document.getElementById('methodValue').value) || 0;
+            const paramsStr = document.getElementById('methodParams').value;
+            
+            if (!contractId || !method || !caller) {
+                showResult('Please enter contract ID, method name, and caller address', 'error');
+                return;
+            }
+            
+            let params = [];
+            if (paramsStr.trim()) {
+                try {
+                    params = JSON.parse(paramsStr);
+                } catch (e) {
+                    showResult('Invalid JSON in parameters', 'error');
+                    return;
+                }
+            }
+            
+            try {
+                const response = await fetch('/api/contracts/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contractId, method, params, caller, value })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showResult(`Contract executed successfully!<br>
+                               <strong>Result:</strong> ${JSON.stringify(result.result)}<br>
+                               <strong>Gas Used:</strong> ${result.gasUsed}<br>
+                               <strong>Events:</strong> ${result.events ? result.events.length : 0}`, 'success');
+                } else {
+                    showResult(result.error || 'Execution failed', 'error');
+                }
+            } catch (error) {
+                showResult('Network error: ' + error.message, 'error');
+            }
+        }
+        
+        // Get contract info
+        async function getContractInfo() {
+            const contractId = document.getElementById('executeContractId').value;
+            
+            if (!contractId) {
+                showResult('Please enter contract ID', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/contracts/${contractId}`);
+                const result = await response.json();
+                
+                if (result.contract) {
+                    const contract = result.contract;
+                    showResult(`<strong>Contract Info:</strong><br>
+                               <strong>ID:</strong> ${contract.id}<br>
+                               <strong>Creator:</strong> ${contract.creator}<br>
+                               <strong>Created:</strong> ${new Date(contract.created).toLocaleString()}<br>
+                               <strong>Balance:</strong> ${contract.balance} EKH<br>
+                               <strong>State:</strong> ${JSON.stringify(contract.state, null, 2)}<br>
+                               <strong>Events:</strong> ${contract.eventCount}`, 'success');
+                } else {
+                    showResult('Contract not found', 'error');
+                }
+            } catch (error) {
+                showResult('Network error: ' + error.message, 'error');
+            }
+        }
+        
+        // Load all contracts
+        async function loadAllContracts() {
+            try {
+                const response = await fetch('/api/contracts/all');
+                const result = await response.json();
+                
+                const contractsDiv = document.getElementById('allContracts');
+                
+                if (result.contracts && result.contracts.length > 0) {
+                    contractsDiv.innerHTML = result.contracts.map(contract => `
+                        <div class="card mb-2">
+                            <div class="card-body p-3">
+                                <div class="row">
+                                    <div class="col-md-8">
+                                        <h6 class="mb-1">${contract.id}</h6>
+                                        <small class="text-muted">
+                                            Creator: ${contract.creator}<br>
+                                            Created: ${new Date(contract.created).toLocaleString()}<br>
+                                            Balance: ${contract.balance} EKH | Events: ${contract.eventCount}
+                                        </small>
+                                    </div>
+                                    <div class="col-md-4 text-end">
+                                        <button class="btn btn-sm btn-outline-primary" onclick="document.getElementById('executeContractId').value='${contract.id}'">
+                                            Use Contract
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    // Update stats
+                    document.getElementById('totalContracts').textContent = result.contracts.length;
+                    document.getElementById('activeContracts').textContent = result.contracts.filter(c => c.balance > 0).length;
+                } else {
+                    contractsDiv.innerHTML = '<p class="text-muted">No contracts deployed yet.</p>';
+                }
+            } catch (error) {
+                console.error('Failed to load contracts:', error);
+            }
+        }
+        
+        // Show result
+        function showResult(message, type) {
+            const resultsDiv = document.getElementById('contractResults');
+            const className = type === 'success' ? 'contract-result' : 'contract-error';
+            resultsDiv.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTemplates();
+            loadAllContracts();
+        });
+    </script>
+</body>
+</html>
