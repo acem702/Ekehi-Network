@@ -216,24 +216,25 @@
                         </div>
                         <hr>
                         <div class="mt-3">
-                            <h6 class="mb-2">Manual Peer Management</h6>
+                            <h6 class="mb-2">Manual Peer Connection</h6>
                             <div class="input-group input-group-sm mb-2">
-                                <input type="url" class="form-control" id="newPeerUrl" placeholder="https://peer-repl-url.repl.co">
-                                <button class="btn btn-outline-primary" onclick="addPeer()">
-                                    <i class="fas fa-plus"></i> Add
+                                <input type="url" class="form-control" id="newPeerUrl" placeholder="https://peer-blockchain-node.repl.co">
+                                <button class="btn btn-outline-primary" onclick="connectToPeer()">
+                                    <i class="fas fa-link"></i> Connect
                                 </button>
                             </div>
-                            <div class="btn-group-sm" role="group">
-                                <button class="btn btn-outline-info btn-sm" onclick="debugPeers()">
-                                    <i class="fas fa-bug"></i> Debug
+                            <div class="btn-group btn-group-sm mb-2" role="group">
+                                <button class="btn btn-outline-success" onclick="forceDiscovery()">
+                                    <i class="fas fa-search"></i> Discover Peers
                                 </button>
-                                <button class="btn btn-outline-warning btn-sm" onclick="forceSync()">
-                                    <i class="fas fa-sync"></i> Force Sync
+                                <button class="btn btn-outline-warning" onclick="forceSync()">
+                                    <i class="fas fa-sync"></i> Sync Blockchain
                                 </button>
-                                <button class="btn btn-outline-success btn-sm" onclick="forceDiscovery()">
-                                    <i class="fas fa-search"></i> Discover
+                                <button class="btn btn-outline-info" onclick="debugPeers()">
+                                    <i class="fas fa-bug"></i> Debug Info
                                 </button>
                             </div>
+                            <div id="connectionStatus" class="mt-2"></div>
                         </div>
                     </div>
                 </div>
@@ -632,25 +633,50 @@
             }
         }
 
-        async function addPeer() {
+        async function connectToPeer() {
             const peerUrl = document.getElementById('newPeerUrl').value.trim();
             if (!peerUrl) {
                 showAlert('Please enter a valid peer URL', 'warning');
                 return;
             }
 
+            if (!peerUrl.startsWith('http://') && !peerUrl.startsWith('https://')) {
+                showAlert('Please enter a valid URL starting with http:// or https://', 'warning');
+                return;
+            }
+
             try {
-                const response = await fetch('/register-and-broadcast-node', {
+                document.getElementById('connectionStatus').innerHTML = `
+                    <div class="alert alert-info alert-sm">
+                        <i class="fas fa-spinner fa-spin"></i> Connecting to peer...
+                    </div>
+                `;
+
+                const response = await fetch('/api/network/connect-peer', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ newNodeUrl: peerUrl })
+                    body: JSON.stringify({ peerUrl })
                 });
                 const result = await response.json();
-                showAlert(result.note || 'Peer added successfully', 'success');
-                document.getElementById('newPeerUrl').value = '';
-                setTimeout(loadDashboardData, 1000);
+
+                if (result.success) {
+                    document.getElementById('connectionStatus').innerHTML = `
+                        <div class="alert alert-success alert-sm">
+                            ✅ ${result.message}<br>
+                            <small>Network: ${result.totalPeers} peers, Local: ${result.localBlocks} blocks</small>
+                        </div>
+                    `;
+                    document.getElementById('newPeerUrl').value = '';
+                    setTimeout(loadDashboardData, 1000);
+                } else {
+                    throw new Error(result.error || 'Connection failed');
+                }
             } catch (error) {
-                showAlert('Failed to add peer', 'danger');
+                document.getElementById('connectionStatus').innerHTML = `
+                    <div class="alert alert-danger alert-sm">
+                        ❌ Connection failed: ${error.message}
+                    </div>
+                `;
             }
         }
 
@@ -768,27 +794,28 @@ Seeds: ${result.discoverySeeds.join(', ') || 'None'}
             // Force blockchain sync
             async function forceSync() {
                 try {
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-info alert-sm">
-                            <i class="fas fa-spinner fa-spin"></i> Forcing blockchain sync...
+                            <i class="fas fa-spinner fa-spin"></i> Syncing blockchain...
                         </div>
                     `;
                     
-                    const response = await fetch('/api/debug/force-sync', {
-                        method: 'POST'
+                    const response = await fetch('/consensus', {
+                        method: 'GET'
                     });
                     const result = await response.json();
                     
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-success alert-sm">
-                            Sync complete! Updated: ${result.result.updated}, Chain: ${result.chainLength} blocks
+                            🔄 ${result.note}<br>
+                            <small>Chain length: ${result.chain ? result.chain.length : 'N/A'} blocks</small>
                         </div>
                     `;
-                    loadDashboardData();
+                    setTimeout(loadDashboardData, 1000);
                 } catch (error) {
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-danger alert-sm">
-                            Sync failed: ${error.message}
+                            🔄 Sync failed: ${error.message}
                         </div>
                     `;
                 }
@@ -797,27 +824,28 @@ Seeds: ${result.discoverySeeds.join(', ') || 'None'}
             // Force peer discovery
             async function forceDiscovery() {
                 try {
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-info alert-sm">
                             <i class="fas fa-spinner fa-spin"></i> Discovering peers...
                         </div>
                     `;
                     
-                    const response = await fetch('/api/debug/force-discovery', {
+                    const response = await fetch('/api/network/discover', {
                         method: 'POST'
                     });
                     const result = await response.json();
                     
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-success alert-sm">
-                            Discovery complete! Found: ${result.result.discovered} new, Total: ${result.result.total}
+                            🔍 Discovery complete!<br>
+                            <small>Found: ${result.discovered} new peers, Total: ${result.totalPeers}</small>
                         </div>
                     `;
-                    loadDashboardData();
+                    setTimeout(loadDashboardData, 1000);
                 } catch (error) {
-                    document.getElementById('sync-status').innerHTML = `
+                    document.getElementById('connectionStatus').innerHTML = `
                         <div class="alert alert-danger alert-sm">
-                            Discovery failed: ${error.message}
+                            🔍 Discovery failed: ${error.message}
                         </div>
                     `;
                 }
