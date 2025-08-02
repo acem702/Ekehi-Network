@@ -33,14 +33,14 @@ class Blockchain {
       // Add your actual Replit URLs here when you have multiple instances
       // Example: 'https://blockchain-node-2.your-username.repl.co',
       // Example: 'https://blockchain-node-3.your-username.repl.co'
-      'https://96b1a29f-366b-473e-814e-fa9afb7a900d-00-uazzfrfplfy.riker.replit.dev'
+      'https://ekehi-network.onrender.com'
     ];
-    
+
     // Peer health monitoring
     this.peerHealthCache = new Map(); // url -> { lastSeen, blocks, healthy }
     this.maxUnhealthyPeers = 10; // Remove unhealthy peers after this many
     this.peerHealthCheckInterval = 30000; // Check peer health every 30 seconds
-    
+
     // Fix currentNodeUrl to use proper Replit URL if available
     if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
       this.currentNodeUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
@@ -62,13 +62,13 @@ class Blockchain {
 
     // Initialize LevelDB
     this.db = new Level('./blockchain-db', { valueEncoding: 'json' });
-    
+
     // Initialize contract system
     this.contractSystem = new ContractSystem(this);
-    
+
     // Initialize sync manager
     this.syncManager = new SyncManager(this);
-    
+
     this.initializeBlockchain();
   }
 
@@ -79,11 +79,11 @@ class Blockchain {
         await this.db.open();
       }
       console.log('Database opened successfully');
-      
+
       // Try to load existing data
       await this.loadFromDatabase();
       console.log(`${this.networkName} loaded with ${this.chain.length} blocks`);
-      
+
       // Verify we have a valid genesis block
       if (this.chain.length === 0 || !this.isValidGenesisBlock(this.chain[0])) {
         console.log('Invalid or missing genesis block, creating new one...');
@@ -96,7 +96,7 @@ class Blockchain {
       console.log(`Creating new ${this.networkName}...`);
       this.chain = []; // Ensure clean slate
       this.createGenesisBlock();
-      
+
       // Save after ensuring DB is open
       try {
         if (this.db.status !== 'open') {
@@ -174,23 +174,49 @@ class Blockchain {
   }
 
   async autoMine() {
-    if (this.isMining || this.pendingTransactions.length === 0) return;
+    if (this.isMining) return;
+
+    // First sync transaction pool with network
+    await this.syncTransactionPool();
+
+    if (this.pendingTransactions.length === 0) return;
 
     this.isMining = true;
     console.log(`Auto-mining started - ${this.pendingTransactions.length} pending transactions`);
 
     try {
+      // Check if another node is already mining
+      const miningStatus = await this.checkNetworkMiningStatus();
+      if (miningStatus.activeMiner && miningStatus.activeMiner !== this.currentNodeUrl) {
+        console.log(`⚠️ Mining in progress by ${miningStatus.activeMiner}, waiting...`);
+        this.isMining = false;
+        return;
+      }
+
+      // Announce mining intent to network
+      await this.announceMiningIntent();
+
       const lastBlock = this.getLastBlock();
       const previousBlockHash = lastBlock.hash;
+
+      // Use shared transaction pool
+      const availableTransactions = await this.getSharedTransactionPool();
+      const selectedTransactions = availableTransactions.slice(0, this.maxTransactionsPerBlock);
+
+      if (selectedTransactions.length === 0) {
+        this.isMining = false;
+        return;
+      }
+
       const currentBlockData = {
-        transactions: this.pendingTransactions.slice(0, this.maxTransactionsPerBlock),
+        transactions: selectedTransactions,
         index: lastBlock.index + 1,
       };
 
       const nonce = this.proofOfWork(previousBlockHash, currentBlockData);
       const blockHash = this.hashBlock(previousBlockHash, currentBlockData, nonce);
 
-      // Add mining reward (mining rewards don't require fees)
+      // Add mining reward
       const rewardTransaction = {
         amount: this.miningReward,
         sender: '00',
@@ -205,16 +231,219 @@ class Blockchain {
       const newBlock = await this.createNewBlock(nonce, previousBlockHash, blockHash);
       this.adjustDifficulty();
 
-      console.log(`Block #${newBlock.index} mined successfully! Hash: ${blockHash.substring(0, 16)}...`);
-      console.log(`Reward: ${this.miningReward} ${this.tokenSymbol} to ${this.minerAddress}`);
+      console.log(`⛏️ Block #${newBlock.index} mined successfully! Hash: ${blockHash.substring(0, 16)}...`);
+      console.log(`💰 Reward: ${this.miningReward} ${this.tokenSymbol} to ${this.minerAddress}`);
 
-      // Broadcast to network nodes
+      // Broadcast new block and clear mining intent
       await this.broadcastNewBlock(newBlock);
+      await this.clearMiningIntent();
+
+      // Remove mined transactions from shared pool
+      await this.removeMinedTransactionsFromPool(selectedTransactions);
 
     } catch (error) {
       console.error('Auto-mining error:', error);
+      await this.clearMiningIntent();
     } finally {
       this.isMining = false;
+    }
+  }
+
+  async syncTransactionPool() {
+    if (this.networkNodes.length === 0) return;
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return;
+      }
+
+      const allTransactions = new Map();
+
+      // Add local transactions
+      this.pendingTransactions.forEach(tx => {
+        if (tx.transactionId) {
+          allTransactions.set(tx.transactionId, tx);
+        }
+      });
+
+      // Fetch transactions from peers
+      for (const peerUrl of this.networkNodes.slice(0, 3)) {
+        try {
+          const response = await rp({
+            uri: peerUrl + "/mempool",
+            method: "GET",
+            json: true,
+            timeout: 5000
+          });
+
+          if (response && response.pendingTransactions) {
+            response.pendingTransactions.forEach(tx => {
+              if (tx.transactionId && !allTransactions.has(tx.transactionId)) {
+                allTransactions.set(tx.transactionId, tx);
+              }
+            });
+          }
+        } catch (error) {
+          console.log(`Failed to sync mempool with ${peerUrl}: ${error.message}`);
+        }
+      }
+
+      // Update local pending transactions
+      this.pendingTransactions = Array.from(allTransactions.values());
+      console.log(`🔄 Transaction pool synced: ${this.pendingTransactions.length} transactions`);
+
+    } catch (error) {
+      console.error('Transaction pool sync error:', error);
+    }
+  }
+
+  async getSharedTransactionPool() {
+    // Return high-priority transactions first (higher fees)
+    return this.pendingTransactions
+      .filter(tx => {
+        // Ensure transaction isn't already in blockchain
+        const exists = this.chain.some(block => 
+          block.transactions.some(btx => btx.transactionId === tx.transactionId)
+        );
+        return !exists;
+      })
+      .sort((a, b) => (b.fee || 0) - (a.fee || 0));
+  }
+
+  async checkNetworkMiningStatus() {
+    if (this.networkNodes.length === 0) {
+      return { activeMiner: null };
+    }
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return { activeMiner: null };
+      }
+
+      for (const peerUrl of this.networkNodes) {
+        try {
+          const response = await rp({
+            uri: peerUrl + "/mining/status",
+            method: "GET",
+            json: true,
+            timeout: 3000
+          });
+
+          if (response && response.isMining) {
+            return { activeMiner: peerUrl };
+          }
+        } catch (error) {
+          // Peer might be down, continue checking others
+        }
+      }
+
+      return { activeMiner: null };
+    } catch (error) {
+      return { activeMiner: null };
+    }
+  }
+
+  async announceMiningIntent() {
+    if (this.networkNodes.length === 0) return;
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return;
+      }
+
+      const announcements = this.networkNodes.map(async (nodeUrl) => {
+        try {
+          await rp({
+            uri: nodeUrl + "/api/mining/announce",
+            method: "POST",
+            body: { 
+              miner: this.currentNodeUrl,
+              timestamp: Date.now()
+            },
+            json: true,
+            timeout: 3000
+          });
+        } catch (error) {
+          // Non-critical if announcement fails
+        }
+      });
+
+      await Promise.allSettled(announcements);
+    } catch (error) {
+      console.error('Mining announcement error:', error);
+    }
+  }
+
+  async clearMiningIntent() {
+    if (this.networkNodes.length === 0) return;
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return;
+      }
+
+      const clearances = this.networkNodes.map(async (nodeUrl) => {
+        try {
+          await rp({
+            uri: nodeUrl + "/api/mining/clear",
+            method: "POST",
+            body: { miner: this.currentNodeUrl },
+            json: true,
+            timeout: 3000
+          });
+        } catch (error) {
+          // Non-critical if clearance fails
+        }
+      });
+
+      await Promise.allSettled(clearances);
+    } catch (error) {
+      console.error('Mining clearance error:', error);
+    }
+  }
+
+  async removeMinedTransactionsFromPool(minedTransactions) {
+    if (this.networkNodes.length === 0) return;
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return;
+      }
+
+      const txIds = minedTransactions.map(tx => tx.transactionId);
+
+      const removals = this.networkNodes.map(async (nodeUrl) => {
+        try {
+          await rp({
+            uri: nodeUrl + "/api/mempool/remove",
+            method: "POST",
+            body: { transactionIds: txIds },
+            json: true,
+            timeout: 5000
+          });
+        } catch (error) {
+          console.log(`Failed to remove transactions from ${nodeUrl}: ${error.message}`);
+        }
+      });
+
+      await Promise.allSettled(removals);
+    } catch (error) {
+      console.error('Transaction removal error:', error);
     }
   }
 
@@ -225,7 +454,7 @@ class Blockchain {
     }
 
     console.log(`📢 Broadcasting new block to ${this.networkNodes.length} peers...`);
-    
+
     // Import request-promise
     let rp;
     try {
@@ -300,7 +529,7 @@ class Blockchain {
           return;
         }
       }
-      
+
       // Save data with individual error handling
       try {
         await this.db.put('blockchain', this.chain);
@@ -327,7 +556,7 @@ class Blockchain {
       console.log('Genesis block already exists, skipping creation');
       return;
     }
-    
+
     const genesisBlock = {
       index: 1, // Always use index 1 for consistency
       timestamp: Date.now(),
@@ -378,7 +607,7 @@ class Blockchain {
   createNewTransaction(amount, sender, recipient, fee = 0) {
     // Enforce minimum fee - don't auto-adjust, validate as provided
     const actualFee = parseFloat(fee) || 0;
-    
+
     // Enhanced validation
     if (!this.isValidTransaction(amount, sender, recipient, actualFee)) {
       throw new Error('Invalid transaction');
@@ -406,12 +635,12 @@ class Blockchain {
     if (!sender || !recipient) return false;
     if (!this.isValidAddress(sender) && sender !== '00' && sender !== 'FAUCET' && sender !== 'ECOSYSTEM') return false;
     if (!this.isValidAddress(recipient)) return false;
-    
+
     // Special senders don't require fees
     if (sender === '00' || sender === 'FAUCET' || sender === 'ECOSYSTEM') {
       return true;
     }
-    
+
     // Enforce minimum fee requirement for regular transactions
     const actualFee = parseFloat(fee) || 0;
     if (actualFee < this.minTransactionFee) {
@@ -557,14 +786,19 @@ class Blockchain {
 
   async resolveConflicts(blockchains) {
     console.log(`🔄 Resolving conflicts with ${blockchains.length} blockchains...`);
-    
-    let bestChain = null;
-    let maxLength = this.chain.length;
-    let bestPendingTransactions = null;
-    let maxWork = this.calculateChainWork(this.chain);
 
-    console.log(`📊 Local chain: ${this.chain.length} blocks, work: ${maxWork}`);
+    const candidateChains = [];
 
+    // Add local chain as candidate
+    candidateChains.push({
+      chain: this.chain,
+      source: 'local',
+      work: this.calculateChainWork(this.chain),
+      length: this.chain.length,
+      isValid: true
+    });
+
+    // Evaluate all remote chains
     for (const blockchain of blockchains) {
       if (!blockchain || !blockchain.chain || !Array.isArray(blockchain.chain)) {
         console.log(`❌ Invalid blockchain structure`);
@@ -573,34 +807,52 @@ class Blockchain {
 
       const chainLength = blockchain.chain.length;
       const chainWork = this.calculateChainWork(blockchain.chain);
-      
-      console.log(`📊 Remote chain: ${chainLength} blocks, work: ${chainWork}`);
+      const isValid = this.chainIsValid(blockchain.chain);
 
-      // Only consider longer chains with valid structure
-      if (chainLength > maxLength && this.chainIsValid(blockchain.chain)) {
-        console.log(`✅ Found better chain: ${chainLength} blocks vs ${maxLength}`);
-        maxLength = chainLength;
-        maxWork = chainWork;
-        bestChain = blockchain.chain;
-        bestPendingTransactions = blockchain.pendingTransactions;
-      } else {
-        console.log(`❌ Chain rejected: length=${chainLength}, valid=${this.chainIsValid(blockchain.chain)}`);
+      console.log(`📊 Remote chain: ${chainLength} blocks, work: ${chainWork}, valid: ${isValid}`);
+
+      if (isValid) {
+        candidateChains.push({
+          chain: blockchain.chain,
+          source: blockchain.source || 'unknown',
+          work: chainWork,
+          length: chainLength,
+          pendingTransactions: blockchain.pendingTransactions,
+          isValid: true
+        });
       }
     }
 
-    if (bestChain) {
-      console.log(`🔄 Replacing chain: ${this.chain.length} -> ${bestChain.length} blocks`);
-      
+    // Enhanced consensus: Consider both length and cumulative work
+    const bestChain = this.selectBestChainByConsensus(candidateChains);
+
+    if (bestChain.source !== 'local') {
+      console.log(`🔄 Replacing chain: ${this.chain.length} -> ${bestChain.length} blocks from ${bestChain.source}`);
+
+      // Check for potential fork
+      const forkPoint = this.findForkPoint(this.chain, bestChain.chain);
+      if (forkPoint > 0) {
+        console.log(`🍴 Fork detected at block ${forkPoint}, resolving...`);
+        await this.handleFork(forkPoint, bestChain);
+      }
+
       // Create backup
       const oldChain = [...this.chain];
       const oldPending = [...this.pendingTransactions];
-      
+
       try {
-        this.chain = [...bestChain];
-        this.pendingTransactions = bestPendingTransactions || [];
+        this.chain = [...bestChain.chain];
+        this.pendingTransactions = this.mergeTransactionPools(
+          bestChain.pendingTransactions || [],
+          oldPending
+        );
         await this.saveToDatabase();
-        
+
         console.log(`✅ Chain replaced successfully!`);
+
+        // Notify network of consensus change
+        await this.broadcastConsensusUpdate(bestChain);
+
         return true;
       } catch (error) {
         console.error(`❌ Failed to replace chain:`, error);
@@ -610,9 +862,136 @@ class Blockchain {
         return false;
       }
     }
-    
+
     console.log(`✅ Local chain is already the best`);
     return false;
+  }
+
+  selectBestChainByConsensus(candidateChains) {
+    if (candidateChains.length === 0) return null;
+
+    // Sort by multiple criteria:
+    // 1. Validity (must be valid)
+    // 2. Length (longer is better)
+    // 3. Cumulative work (more work is better)
+    // 4. Most recent block timestamp
+    return candidateChains
+      .filter(chain => chain.isValid)
+      .sort((a, b) => {
+        // Primary: chain length
+        if (a.length !== b.length) {
+          return b.length - a.length;
+        }
+
+        // Secondary: cumulative work
+        if (a.work !== b.work) {
+          return b.work - a.work;
+        }
+
+        // Tertiary: most recent block timestamp
+        const aLastBlock = a.chain[a.chain.length - 1];
+        const bLastBlock = b.chain[b.chain.length - 1];
+        return (bLastBlock?.timestamp || 0) - (aLastBlock?.timestamp || 0);
+      })[0];
+  }
+
+  findForkPoint(chainA, chainB) {
+    const minLength = Math.min(chainA.length, chainB.length);
+
+    for (let i = 0; i < minLength; i++) {
+      if (chainA[i].hash !== chainB[i].hash) {
+        return i;
+      }
+    }
+
+    return minLength;
+  }
+
+  async handleFork(forkPoint, newChain) {
+    console.log(`🍴 Handling fork at block ${forkPoint}`);
+
+    // Extract transactions from discarded blocks
+    const discardedTransactions = [];
+
+    for (let i = forkPoint; i < this.chain.length; i++) {
+      const block = this.chain[i];
+      block.transactions.forEach(tx => {
+        // Don't re-add mining rewards or special transactions
+        if (tx.sender !== '00' && tx.sender !== 'FAUCET' && tx.sender !== 'ECOSYSTEM') {
+          discardedTransactions.push(tx);
+        }
+      });
+    }
+
+    // Re-add valid discarded transactions to pending pool
+    for (const tx of discardedTransactions) {
+      try {
+        // Validate transaction is still valid
+        if (this.isValidTransaction(tx.amount, tx.sender, tx.recipient, tx.fee)) {
+          // Check if transaction doesn't exist in new chain
+          const existsInNewChain = newChain.chain.some(block =>
+            block.transactions.some(btx => btx.transactionId === tx.transactionId)
+          );
+
+          if (!existsInNewChain) {
+            this.pendingTransactions.push(tx);
+          }
+        }
+      } catch (error) {
+        console.log(`Transaction ${tx.transactionId} invalid after fork: ${error.message}`);
+      }
+    }
+
+    console.log(`🔄 Re-added ${discardedTransactions.length} transactions to pending pool after fork resolution`);
+  }
+
+  mergeTransactionPools(remotePending, localPending) {
+    const merged = [...(remotePending || [])];
+    const remoteIds = new Set(merged.map(tx => tx.transactionId));
+
+    // Add local transactions not in remote pool
+    for (const tx of localPending || []) {
+      if (tx.transactionId && !remoteIds.has(tx.transactionId)) {
+        merged.push(tx);
+      }
+    }
+
+    return merged;
+  }
+
+  async broadcastConsensusUpdate(newChain) {
+    if (this.networkNodes.length === 0) return;
+
+    try {
+      let rp;
+      try {
+        rp = (await import('request-promise')).default;
+      } catch (importError) {
+        return;
+      }
+
+      const updates = this.networkNodes.map(async (nodeUrl) => {
+        try {
+          await rp({
+            uri: nodeUrl + "/api/consensus/update",
+            method: "POST",
+            body: { 
+              newChainLength: newChain.length,
+              source: this.currentNodeUrl,
+              timestamp: Date.now()
+            },
+            json: true,
+            timeout: 5000
+          });
+        } catch (error) {
+          console.log(`Failed to notify ${nodeUrl} of consensus update: ${error.message}`);
+        }
+      });
+
+      await Promise.allSettled(updates);
+    } catch (error) {
+      console.error('Consensus update broadcast error:', error);
+    }
   }
 
   calculateChainWork(chain) {
@@ -699,6 +1078,43 @@ class Blockchain {
     }
   }
 
+  // Auto-mining functionality
+  startAutoMining() {
+    if (this.autoMining) {
+      console.log('⚠️ Auto-mining is already active');
+      return;
+    }
+
+    console.log('🚀 Starting auto-mining...');
+    this.autoMining = true;
+
+    this.miningInterval = setInterval(async () => {
+      if (this.pendingTransactions.length > 0) {
+        console.log(`⛏️ Auto-mining block with ${this.pendingTransactions.length} transactions...`);
+        try {
+          await this.autoMine();
+        } catch (error) {
+          console.error('❌ Auto-mining failed:', error.message);
+        }
+      }
+    }, 10000); // Mine every 10 seconds if transactions are pending
+  }
+
+  stopAutoMining() {
+    if (!this.autoMining) {
+      console.log('⚠️ Auto-mining is already stopped');
+      return;
+    }
+
+    console.log('🛑 Stopping auto-mining...');
+    this.autoMining = false;
+
+    if (this.miningInterval) {
+      clearInterval(this.miningInterval);
+      this.miningInterval = null;
+    }
+  }
+
   getStats() {
     // Calculate total supply from mining rewards only
     const miningRewards = this.chain.reduce((total, block) => {
@@ -723,7 +1139,7 @@ class Blockchain {
 
     // Total supply = mining rewards + faucet distribution + ecosystem rewards
     const totalSupply = miningRewards + faucetDistribution + ecosystemDistribution;
-    
+
     // Calculate circulating supply (excludes locked/inactive addresses)
     const circulatingSupply = this.calculateCirculatingSupply();
 
@@ -754,7 +1170,7 @@ class Blockchain {
   calculateCirculatingSupply() {
     // Get all unique addresses and their balances
     const addressBalances = new Map();
-    
+
     this.chain.forEach(block => {
       block.transactions.forEach(tx => {
         // Add to recipient
@@ -762,7 +1178,7 @@ class Blockchain {
           const currentBalance = addressBalances.get(tx.recipient) || 0;
           addressBalances.set(tx.recipient, currentBalance + tx.amount);
         }
-        
+
         // Subtract from sender (except mining and faucet)
         if (tx.sender !== '00' && tx.sender !== 'FAUCET') {
           const currentBalance = addressBalances.get(tx.sender) || 0;
@@ -774,7 +1190,7 @@ class Blockchain {
     // Calculate circulating supply (addresses with recent activity)
     let circulatingSupply = 0;
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
+
     for (const [address, balance] of addressBalances) {
       if (balance > 0) {
         // Check if address has been active in last 30 days
@@ -793,7 +1209,7 @@ class Blockchain {
     for (let i = this.chain.length - 1; i >= 0; i--) {
       const block = this.chain[i];
       if (block.timestamp < since) break;
-      
+
       for (const tx of block.transactions) {
         if (tx.sender === address || tx.recipient === address) {
           return true;
@@ -805,12 +1221,12 @@ class Blockchain {
 
   calculateInflationRate(totalSupply) {
     if (totalSupply === 0) return 0;
-    
+
     // Calculate annual inflation based on current mining rate
     const avgBlockTime = this.getAverageBlockTime() || this.targetBlockTime;
     const blocksPerYear = (365 * 24 * 60 * 60 * 1000) / avgBlockTime;
     const annualMiningRewards = blocksPerYear * this.miningReward;
-    
+
     return (annualMiningRewards / totalSupply) * 100;
   }
 
@@ -901,19 +1317,19 @@ class Blockchain {
   getNodeMetrics() {
     const currentTime = Date.now();
     const uptime = currentTime - this.nodeMetrics.uptime;
-    
+
     // Calculate hash rate based on recent mining activity
     let hashRate = 0;
     if (this.chain.length > 1) {
       const recentBlocks = this.chain.slice(-5);
       let totalNonces = 0;
       let totalTime = 0;
-      
+
       for (let i = 1; i < recentBlocks.length; i++) {
         totalNonces += recentBlocks[i].nonce;
         totalTime += recentBlocks[i].timestamp - recentBlocks[i-1].timestamp;
       }
-      
+
       if (totalTime > 0) {
         hashRate = (totalNonces / (totalTime / 1000)); // Hashes per second
       }
@@ -934,25 +1350,25 @@ class Blockchain {
   // Enhanced peer discovery functionality
   async startPeerDiscovery() {
     console.log('🚀 Starting enhanced peer discovery system...');
-    
+
     // Initial discovery (slightly delayed to allow server startup)
     setTimeout(async () => {
       console.log('🔄 Running initial peer discovery...');
       await this.discoverPeers();
     }, 8000); // Initial discovery after 8 seconds
-    
+
     // Regular discovery with exponential backoff on failures
     let failureCount = 0;
     const baseInterval = 45000; // Base 45 seconds
-    
+
     const scheduleNextDiscovery = () => {
       const delay = Math.min(baseInterval * Math.pow(1.5, failureCount), 300000); // Max 5 minutes
-      
+
       this.discoveryInterval = setTimeout(async () => {
         try {
           console.log(`🔄 Running scheduled peer discovery (attempt ${failureCount + 1})...`);
           const result = await this.discoverPeers();
-          
+
           if (result.discovered > 0 || result.total > 0) {
             failureCount = 0; // Reset on success
             console.log(`✅ Discovery successful, resetting failure count`);
@@ -967,12 +1383,12 @@ class Blockchain {
           scheduleNextDiscovery(); // Schedule next discovery
         }
       }, delay);
-      
+
       console.log(`⏰ Next peer discovery in ${Math.round(delay/1000)} seconds`);
     };
-    
+
     scheduleNextDiscovery();
-    
+
     // Start peer health monitoring
     this.startPeerHealthMonitoring();
   }
@@ -980,10 +1396,10 @@ class Blockchain {
   // Start monitoring peer health
   startPeerHealthMonitoring() {
     console.log('💓 Starting peer health monitoring...');
-    
+
     this.healthMonitorInterval = setInterval(async () => {
       if (this.networkNodes.length === 0) return;
-      
+
       try {
         let rp;
         try {
@@ -993,7 +1409,7 @@ class Blockchain {
         }
 
         await this.cleanupUnhealthyPeers(rp);
-        
+
         // Update peer health cache
         for (const peerUrl of this.networkNodes) {
           if (await this.quickHealthCheck(peerUrl, rp)) {
@@ -1009,7 +1425,7 @@ class Blockchain {
             });
           }
         }
-        
+
         console.log(`💓 Health check complete: ${this.networkNodes.length} peers monitored`);
       } catch (error) {
         console.error('❌ Peer health monitoring error:', error.message);
@@ -1023,7 +1439,7 @@ class Blockchain {
       this.discoveryInterval = null;
       console.log('🛑 Peer discovery stopped');
     }
-    
+
     if (this.healthMonitorInterval) {
       clearInterval(this.healthMonitorInterval);
       this.healthMonitorInterval = null;
@@ -1061,7 +1477,7 @@ class Blockchain {
       console.log(`🔍 Starting enhanced peer discovery from ${this.discoverySeeds.length} seed nodes...`);
       console.log(`📍 Current node URL: ${this.currentNodeUrl}`);
       console.log(`📋 Discovery seeds:`, this.discoverySeeds);
-      
+
       let discovered = 0;
       const healthySeeds = [];
       const failedSeeds = [];
@@ -1077,13 +1493,13 @@ class Blockchain {
 
       // Phase 1: Health check all discovery seeds
       console.log(`🏥 Phase 1: Health checking ${this.discoverySeeds.length} seeds...`);
-      
+
       for (const seedUrl of this.discoverySeeds) {
         if (seedUrl === this.currentNodeUrl) {
           console.log(`⏭️ Skipping self: ${seedUrl}`);
           continue;
         }
-        
+
         try {
           const healthCheck = await rp({
             uri: seedUrl + "/stats",
@@ -1112,9 +1528,9 @@ class Blockchain {
 
       // Phase 2: Connect to healthy seeds in order of block count (highest first)
       healthySeeds.sort((a, b) => b.blocks - a.blocks);
-      
+
       console.log(`🔗 Phase 2: Connecting to ${healthySeeds.length} healthy seeds...`);
-      
+
       for (const seed of healthySeeds) {
         try {
           // Register with seed
@@ -1127,7 +1543,7 @@ class Blockchain {
           });
 
           console.log(`📤 Registered with ${seed.url}:`, registerResponse.note);
-          
+
           // Add to network if not present
           if (this.networkNodes.indexOf(seed.url) === -1) {
             this.networkNodes.push(seed.url);
@@ -1143,10 +1559,10 @@ class Blockchain {
               json: true,
               timeout: 8000
             });
-            
+
             if (peersResponse && peersResponse.peers) {
               console.log(`📋 Fetched ${peersResponse.peers.length} peers from ${seed.url}`);
-              
+
               for (const peer of peersResponse.peers) {
                 const peerUrl = peer.url || peer;
                 if (this.isValidPeerUrl(peerUrl) && this.networkNodes.indexOf(peerUrl) === -1) {
@@ -1184,17 +1600,17 @@ class Blockchain {
       this.saveToDatabase().catch(err => {
         console.log('Peer discovery save failed, continuing:', err.message);
       });
-      
+
       // Update metrics
       this.nodeMetrics.peersConnected = this.networkNodes.length;
       this.nodeMetrics.lastPeerDiscovery = Date.now();
-      
+
       console.log(`🎉 Enhanced peer discovery completed:`);
       console.log(`   📡 ${discovered} new peers discovered`);
       console.log(`   🌐 ${this.networkNodes.length} total peers`);
       console.log(`   ✅ ${healthySeeds.length} healthy seeds`);
       console.log(`   ❌ ${failedSeeds.length} failed seeds`);
-      
+
       return {
         discovered,
         total: this.networkNodes.length,
@@ -1242,12 +1658,12 @@ class Blockchain {
       }
       return !isLocalhost;
     });
-    
+
     if (this.networkNodes.length !== initialLength) {
       console.log(`🧹 Removed ${initialLength - this.networkNodes.length} localhost peers`);
       await this.saveToDatabase();
     }
-    
+
     await this.syncManager.cleanupUnhealthyPeers();
   }
 

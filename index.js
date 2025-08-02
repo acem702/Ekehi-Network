@@ -673,6 +673,87 @@ app.get("/mempool", (req, res) => {
   });
 });
 
+// Mining coordination endpoints
+app.post("/api/mining/announce", (req, res) => {
+  const { miner, timestamp } = req.body;
+
+  if (!miner || !timestamp) {
+    return res.status(400).json({ error: 'Miner and timestamp required' });
+  }
+
+  // Store mining announcement (simple in-memory for now)
+  if (!bitcoin.miningAnnouncements) {
+    bitcoin.miningAnnouncements = new Map();
+  }
+
+  bitcoin.miningAnnouncements.set(miner, {
+    timestamp,
+    announced: Date.now()
+  });
+
+  // Clean old announcements (older than 30 seconds)
+  const cutoff = Date.now() - 30000;
+  for (const [minerUrl, data] of bitcoin.miningAnnouncements) {
+    if (data.announced < cutoff) {
+      bitcoin.miningAnnouncements.delete(minerUrl);
+    }
+  }
+
+  res.json({ 
+    message: 'Mining intent announced',
+    activeMiner: miner
+  });
+});
+
+app.post("/api/mining/clear", (req, res) => {
+  const { miner } = req.body;
+
+  if (!miner) {
+    return res.status(400).json({ error: 'Miner required' });
+  }
+
+  if (bitcoin.miningAnnouncements) {
+    bitcoin.miningAnnouncements.delete(miner);
+  }
+
+  res.json({ message: 'Mining intent cleared' });
+});
+
+app.post("/api/mempool/remove", (req, res) => {
+  const { transactionIds } = req.body;
+
+  if (!Array.isArray(transactionIds)) {
+    return res.status(400).json({ error: 'Transaction IDs array required' });
+  }
+
+  const initialCount = bitcoin.pendingTransactions.length;
+  bitcoin.pendingTransactions = bitcoin.pendingTransactions.filter(tx => 
+    !transactionIds.includes(tx.transactionId)
+  );
+
+  const removedCount = initialCount - bitcoin.pendingTransactions.length;
+
+  res.json({ 
+    message: `Removed ${removedCount} transactions from mempool`,
+    remaining: bitcoin.pendingTransactions.length
+  });
+});
+
+app.get("/api/mempool/sync", async (req, res) => {
+  try {
+    await bitcoin.syncTransactionPool();
+    res.json({
+      message: 'Transaction pool synchronized',
+      transactions: bitcoin.pendingTransactions.length
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to sync transaction pool',
+      message: error.message 
+    });
+  }
+});
+
 // Rich list endpoint (top addresses by balance)
 app.get("/richlist", (req, res) => {
   try {
@@ -924,7 +1005,7 @@ app.get("/api/network/peers", (req, res) => {
 app.post("/api/network/connect-peer", async (req, res) => {
   try {
     const { peerUrl } = req.body;
-    
+
     if (!peerUrl) {
       return res.status(400).json({ error: 'Peer URL is required' });
     }
@@ -939,7 +1020,7 @@ app.post("/api/network/connect-peer", async (req, res) => {
     };
 
     await rp(requestOptions);
-    
+
     // Add peer to our list if not already there
     if (bitcoin.networkNodes.indexOf(peerUrl) === -1) {
       bitcoin.networkNodes.push(peerUrl);
@@ -1035,7 +1116,7 @@ app.post("/api/faucet/request", async (req, res) => {
 app.post("/api/network/sync", async (req, res) => {
   try {
     const { nodeUrl } = req.body;
-    
+
     if (!nodeUrl) {
       return res.status(400).json({ error: 'Node URL required' });
     }
@@ -1053,10 +1134,10 @@ app.post("/api/network/sync", async (req, res) => {
 
     try {
       const response = await rp(requestOptions);
-      
+
       if (response && response.chain) {
         const chainReplaced = await bitcoin.resolveConflicts([response]);
-        
+
         res.json({
           success: true,
           nodeAdded: true,
@@ -1095,7 +1176,7 @@ app.post("/api/network/auto-sync", async (req, res) => {
     }
 
     const syncResults = [];
-    
+
     for (const nodeUrl of bitcoin.networkNodes) {
       try {
         const requestOptions = {
@@ -1104,7 +1185,7 @@ app.post("/api/network/auto-sync", async (req, res) => {
           json: true,
           timeout: 5000
         };
-        
+
         const response = await rp(requestOptions);
         syncResults.push({ node: nodeUrl, success: true, blocks: response.chain.length });
       } catch (error) {
@@ -1283,12 +1364,113 @@ app.post("/api/debug/force-discovery", async (req, res) => {
   }
 });
 
+// Consensus update notification endpoint
+app.post("/api/consensus/update", (req, res) => {
+  const { newChainLength, source, timestamp } = req.body;
+
+  console.log(`📢 Consensus update notification from ${source}: ${newChainLength} blocks`);
+
+  // Store consensus update for monitoring
+  if (!bitcoin.consensusUpdates) {
+    bitcoin.consensusUpdates = [];
+  }
+
+  bitcoin.consensusUpdates.push({
+    source,
+    newChainLength,
+    timestamp,
+    received: Date.now()
+  });
+
+  // Keep only recent updates (last 100)
+  if (bitcoin.consensusUpdates.length > 100) {
+    bitcoin.consensusUpdates = bitcoin.consensusUpdates.slice(-100);
+  }
+
+  res.json({ 
+    message: 'Consensus update received',
+    localBlocks: bitcoin.chain.length
+  });
+});
+
+// Recovery endpoint
+app.post("/api/recovery/reset", async (req, res) => {
+  try {
+    console.log('🚑 Manual recovery triggered...');
+
+    // Stop all mining activities
+    bitcoin.stopAutoMining();
+
+    // Perform comprehensive sync
+    const syncResult = await bitcoin.syncManager.performFullSync();
+
+    // Restart auto-mining if it was enabled
+    if (bitcoin.autoMining) {
+      bitcoin.startAutoMining();
+    }
+
+    res.json({
+      success: true,
+      message: 'Recovery completed',
+      syncResult,
+      localBlocks: bitcoin.chain.length,
+      peers: bitcoin.networkNodes.length
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Recovery failed', 
+      message: error.message 
+    });
+  }
+});
+
+// Network health endpoint
+app.get("/api/network/health", async (req, res) => {
+  try {
+    const health = {
+      localNode: {
+        url: bitcoin.currentNodeUrl,
+        blocks: bitcoin.chain.length,
+        difficulty: bitcoin.difficulty,
+        peers: bitcoin.networkNodes.length,
+        mining: bitcoin.isMining,
+        mempool: bitcoin.pendingTransactions.length
+      },
+      consensus: {
+        updates: bitcoin.consensusUpdates || [],
+        lastSync: bitcoin.syncManager?.lastSyncAttempt || 0
+      },
+      mining: {
+        announcements: bitcoin.miningAnnouncements ? 
+          Array.from(bitcoin.miningAnnouncements.entries()).map(([url, data]) => ({
+            miner: url,
+            ...data
+          })) : []
+      },
+      network: {
+        totalPeers: bitcoin.networkNodes.length,
+        healthyPeers: bitcoin.networkNodes.filter(url => {
+          const health = bitcoin.peerHealthCache?.get(url);
+          return health?.healthy !== false;
+        }).length
+      }
+    };
+
+    res.json(health);
+  } catch (error) {
+    res.status(500).json({ 
+      error: 'Failed to get network health',
+      message: error.message 
+    });
+  }
+});
+
 app.listen(port, '0.0.0.0', () => {
   // Determine the public URL
   const publicUrl = process.env.REPL_SLUG && process.env.REPL_OWNER 
     ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
     : `http://0.0.0.0:${port}`;
-    
+
   console.log('🚀 ===================================');
   console.log(`🌐 ${bitcoin.networkName} TESTNET LAUNCHED`);
   console.log('🚀 ===================================');

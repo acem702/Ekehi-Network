@@ -23,60 +23,144 @@ export class SyncManager {
 
     this.syncInProgress = true;
     this.lastSyncAttempt = Date.now();
+    
+    // Enhanced error handling with retry mechanism
+    let attempt = 0;
+    let lastError = null;
 
-    try {
-      console.log('🚀 Starting comprehensive blockchain sync...');
-      console.log(`📊 Local chain: ${this.blockchain.chain.length} blocks`);
-
-      // Import request-promise
-      let rp;
+    while (attempt < this.maxRetries) {
       try {
-        rp = (await import('request-promise')).default;
-      } catch (importError) {
-        console.error('❌ Failed to import request-promise:', importError.message);
-        return { success: false, reason: 'import_failed' };
+        attempt++;
+        console.log(`🚀 Starting comprehensive blockchain sync (attempt ${attempt}/${this.maxRetries})...`);
+        console.log(`📊 Local chain: ${this.blockchain.chain.length} blocks`);
+
+        // Import request-promise
+        let rp;
+        try {
+          rp = (await import('request-promise')).default;
+        } catch (importError) {
+          console.error('❌ Failed to import request-promise:', importError.message);
+          return { success: false, reason: 'import_failed' };
+        }
+
+        if (this.blockchain.networkNodes.length === 0) {
+          console.log('⚠️ No peers available for sync');
+          return { success: false, reason: 'no_peers' };
+        }
+
+        // Pre-sync health check
+        await this.performPeerHealthCheck(rp);
+
+        // Step 1: Collect blockchain data from all peers
+        const peerData = await this.collectPeerBlockchains(rp);
+        
+        if (peerData.length === 0) {
+          throw new Error('No valid blockchain data received from peers');
+        }
+
+        // Step 2: Find the best blockchain
+        const bestChain = this.selectBestBlockchain(peerData);
+        
+        if (!bestChain) {
+          throw new Error('No valid blockchain found from peers');
+        }
+
+        // Step 3: Compare and update if necessary
+        const syncResult = await this.updateBlockchainIfBetter(bestChain);
+        
+        console.log(`📊 Sync completed - Updated: ${syncResult.updated}, Local blocks: ${this.blockchain.chain.length}`);
+        
+        return {
+          success: true,
+          updated: syncResult.updated,
+          localBlocks: this.blockchain.chain.length,
+          peerBlocks: bestChain.chain.length,
+          bestPeer: bestChain.source,
+          attempts: attempt
+        };
+
+      } catch (error) {
+        lastError = error;
+        console.error(`💥 Sync attempt ${attempt} failed:`, error.message);
+        
+        if (attempt < this.maxRetries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 10000); // Exponential backoff
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await this.sleep(delay);
+        }
       }
+    }
 
-      if (this.blockchain.networkNodes.length === 0) {
-        console.log('⚠️ No peers available for sync');
-        return { success: false, reason: 'no_peers' };
+    // All attempts failed
+    console.error(`💥 All sync attempts failed. Last error:`, lastError?.message);
+    
+    // Attempt recovery
+    await this.attemptRecovery();
+    
+    return { 
+      success: false, 
+      reason: 'sync_failed_all_attempts', 
+      error: lastError?.message,
+      attempts: attempt
+    };
+  }
+
+  async attemptRecovery() {
+    console.log('🚑 Attempting sync recovery...');
+    
+    try {
+      // 1. Clean up unhealthy peers
+      await this.cleanupUnhealthyPeers();
+      
+      // 2. Reset sync state
+      this.lastSyncAttempt = 0;
+      
+      // 3. Trigger peer discovery
+      if (this.blockchain.discoverPeers) {
+        await this.blockchain.discoverPeers();
       }
-
-      // Step 1: Collect blockchain data from all peers
-      const peerData = await this.collectPeerBlockchains(rp);
       
-      if (peerData.length === 0) {
-        console.log('❌ No valid blockchain data received from peers');
-        return { success: false, reason: 'no_peer_data' };
+      // 4. Validate local chain integrity
+      if (!this.blockchain.chainIsValid(this.blockchain.chain)) {
+        console.error('🚨 Local chain corruption detected!');
+        // Could implement chain repair logic here
       }
-
-      // Step 2: Find the best blockchain
-      const bestChain = this.selectBestBlockchain(peerData);
       
-      if (!bestChain) {
-        console.log('❌ No valid blockchain found from peers');
-        return { success: false, reason: 'no_valid_chain' };
-      }
-
-      // Step 3: Compare and update if necessary
-      const syncResult = await this.updateBlockchainIfBetter(bestChain);
-      
-      console.log(`📊 Sync completed - Updated: ${syncResult.updated}, Local blocks: ${this.blockchain.chain.length}`);
-      
-      return {
-        success: true,
-        updated: syncResult.updated,
-        localBlocks: this.blockchain.chain.length,
-        peerBlocks: bestChain.chain.length,
-        bestPeer: bestChain.source
-      };
-
+      console.log('✅ Recovery attempt completed');
     } catch (error) {
-      console.error('💥 Sync failed:', error.message);
-      return { success: false, reason: 'sync_error', error: error.message };
+      console.error('❌ Recovery failed:', error.message);
     } finally {
       this.syncInProgress = false;
     }
+  }
+
+  async performPeerHealthCheck(rp) {
+    console.log('🏥 Performing pre-sync peer health check...');
+    
+    const healthyPeers = [];
+    const unhealthyPeers = [];
+    
+    for (const peerUrl of this.blockchain.networkNodes) {
+      const health = await this.checkPeerHealth(peerUrl, rp);
+      
+      if (health.healthy) {
+        healthyPeers.push(peerUrl);
+      } else {
+        unhealthyPeers.push(peerUrl);
+      }
+    }
+    
+    // Remove unhealthy peers
+    if (unhealthyPeers.length > 0) {
+      this.blockchain.networkNodes = healthyPeers;
+      console.log(`🧹 Removed ${unhealthyPeers.length} unhealthy peers before sync`);
+    }
+    
+    console.log(`✅ Health check complete: ${healthyPeers.length} healthy peers`);
+  }
+
+  sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   async collectPeerBlockchains(rp) {
