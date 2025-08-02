@@ -44,7 +44,7 @@ export class SyncManager {
 
       // Step 1: Collect blockchain data from all peers
       const peerData = await this.collectPeerBlockchains(rp);
-
+      
       if (peerData.length === 0) {
         console.log('❌ No valid blockchain data received from peers');
         return { success: false, reason: 'no_peer_data' };
@@ -52,7 +52,7 @@ export class SyncManager {
 
       // Step 2: Find the best blockchain
       const bestChain = this.selectBestBlockchain(peerData);
-
+      
       if (!bestChain) {
         console.log('❌ No valid blockchain found from peers');
         return { success: false, reason: 'no_valid_chain' };
@@ -60,9 +60,9 @@ export class SyncManager {
 
       // Step 3: Compare and update if necessary
       const syncResult = await this.updateBlockchainIfBetter(bestChain);
-
+      
       console.log(`📊 Sync completed - Updated: ${syncResult.updated}, Local blocks: ${this.blockchain.chain.length}`);
-
+      
       return {
         success: true,
         updated: syncResult.updated,
@@ -84,14 +84,27 @@ export class SyncManager {
     const peerData = [];
 
     for (const peerUrl of this.blockchain.networkNodes) {
+      // Skip localhost URLs as they won't be accessible from other instances
+      if (peerUrl.includes('localhost') || peerUrl.includes('127.0.0.1')) {
+        console.log(`⏭️ Skipping localhost peer: ${peerUrl}`);
+        continue;
+      }
+
       try {
         console.log(`📡 Fetching blockchain from ${peerUrl}...`);
-
+        
         const response = await rp({
           uri: peerUrl + "/blockchain",
           method: "GET",
           json: true,
           timeout: 15000
+        });
+
+        console.log(`📊 Response from ${peerUrl}:`, {
+          hasChain: !!(response && response.chain),
+          chainLength: response && response.chain ? response.chain.length : 0,
+          chainType: response && response.chain ? typeof response.chain : 'undefined',
+          isArray: response && response.chain ? Array.isArray(response.chain) : false
         });
 
         if (response && response.chain && Array.isArray(response.chain)) {
@@ -104,6 +117,7 @@ export class SyncManager {
           };
 
           // Validate the blockchain structure
+          console.log(`🔍 Validating blockchain from ${peerUrl}...`);
           if (this.validateBlockchainStructure(peerInfo.chain)) {
             peerData.push(peerInfo);
             console.log(`✅ Valid blockchain from ${peerUrl}: ${peerInfo.chain.length} blocks, difficulty ${peerInfo.difficulty}`);
@@ -111,38 +125,99 @@ export class SyncManager {
             console.log(`❌ Invalid blockchain structure from ${peerUrl}`);
           }
         } else {
-          console.log(`❌ Invalid response format from ${peerUrl}`);
+          console.log(`❌ Invalid response format from ${peerUrl}:`, {
+            responseExists: !!response,
+            chainExists: !!(response && response.chain),
+            isArray: response && response.chain ? Array.isArray(response.chain) : false
+          });
         }
       } catch (error) {
         console.log(`❌ Failed to fetch blockchain from ${peerUrl}: ${error.message}`);
+        // If it's a localhost URL causing issues, remove it
+        if (peerUrl.includes('localhost') || peerUrl.includes('127.0.0.1')) {
+          console.log(`🗑️ Removing problematic localhost peer: ${peerUrl}`);
+          const index = this.blockchain.networkNodes.indexOf(peerUrl);
+          if (index > -1) {
+            this.blockchain.networkNodes.splice(index, 1);
+          }
+        }
       }
     }
 
+    console.log(`📊 Collected ${peerData.length} valid blockchain(s) from peers`);
     return peerData;
   }
 
   validateBlockchainStructure(chain) {
     if (!Array.isArray(chain) || chain.length === 0) {
+      console.log('❌ Validation failed: chain is not array or empty');
       return false;
     }
 
-    // Check genesis block
+    // Check genesis block - be more flexible about index
     const genesis = chain[0];
-    if (!genesis || genesis.index !== 1 || genesis.previousBlockHash !== '0') {
+    if (!genesis) {
+      console.log('❌ Validation failed: missing genesis block');
       return false;
     }
 
-    // Check chain integrity
+    // Genesis block should have previousBlockHash of '0'
+    if (genesis.previousBlockHash !== '0') {
+      console.log('❌ Validation failed: genesis previousBlockHash not 0');
+      return false;
+    }
+
+    // Validate genesis block structure
+    if (!genesis.hash || !genesis.timestamp || !Array.isArray(genesis.transactions)) {
+      console.log('❌ Validation failed: invalid genesis block structure');
+      return false;
+    }
+
+    // For single block chain (genesis only), validate basic structure
+    if (chain.length === 1) {
+      console.log(`✅ Blockchain structure validation passed: ${chain.length} blocks (genesis only)`);
+      return true;
+    }
+
+    // Check chain integrity - normalize indices starting from genesis
+    const startIndex = genesis.index; // Could be 0 or 1
+    console.log(`🔍 Chain starts with genesis index: ${startIndex}`);
+
     for (let i = 1; i < chain.length; i++) {
       const currentBlock = chain[i];
       const previousBlock = chain[i - 1];
 
-      if (!currentBlock || !previousBlock) return false;
-      if (currentBlock.index !== previousBlock.index + 1) return false;
-      if (currentBlock.previousBlockHash !== previousBlock.hash) return false;
-      if (!currentBlock.hash || !currentBlock.timestamp) return false;
+      if (!currentBlock || !previousBlock) {
+        console.log(`❌ Validation failed: missing block at position ${i}`);
+        return false;
+      }
+      
+      // Validate index types
+      if (typeof currentBlock.index !== 'number' || typeof previousBlock.index !== 'number') {
+        console.log(`❌ Validation failed: non-numeric index at position ${i}`);
+        return false;
+      }
+      
+      // Check that each block increments by exactly 1 from the previous
+      if (currentBlock.index !== previousBlock.index + 1) {
+        console.log(`❌ Validation failed: index sequence broken at position ${i}. Previous: ${previousBlock.index}, Current: ${currentBlock.index}, Expected: ${previousBlock.index + 1}`);
+        return false;
+      }
+      
+      // Validate hash chain
+      if (currentBlock.previousBlockHash !== previousBlock.hash) {
+        console.log(`❌ Validation failed: hash chain broken at position ${i}. Expected: ${previousBlock.hash}, Got: ${currentBlock.previousBlockHash}`);
+        return false;
+      }
+      
+      // Validate basic block structure
+      if (!currentBlock.hash || !currentBlock.timestamp || !Array.isArray(currentBlock.transactions)) {
+        console.log(`❌ Validation failed: invalid block structure at position ${i}`);
+        return false;
+      }
     }
 
+    console.log(`✅ Blockchain structure validation passed: ${chain.length} blocks (genesis index: ${startIndex})`);
     return true;
   }
 
@@ -157,12 +232,12 @@ export class SyncManager {
       if (a.chain.length !== b.chain.length) {
         return b.chain.length - a.chain.length;
       }
-
+      
       // Secondary: difficulty
       if (a.difficulty !== b.difficulty) {
         return b.difficulty - a.difficulty;
       }
-
+      
       // Tertiary: total work (sum of difficulties)
       const aWork = this.calculateTotalWork(a.chain);
       const bWork = this.calculateTotalWork(b.chain);
@@ -171,7 +246,7 @@ export class SyncManager {
 
     const bestChain = sortedPeers[0];
     console.log(`🥇 Best chain selected: ${bestChain.source} with ${bestChain.chain.length} blocks, difficulty ${bestChain.difficulty}`);
-
+    
     return bestChain;
   }
 
@@ -185,7 +260,7 @@ export class SyncManager {
   async updateBlockchainIfBetter(bestChain) {
     const localLength = this.blockchain.chain.length;
     const remoteLength = bestChain.chain.length;
-
+    
     console.log(`⚖️ Comparing chains: Local(${localLength}) vs Remote(${remoteLength})`);
 
     // Only update if remote chain is longer
@@ -209,7 +284,7 @@ export class SyncManager {
 
       // Update blockchain
       this.blockchain.chain = [...bestChain.chain];
-
+      
       // Update pending transactions (keep local ones that aren't in the new chain)
       this.blockchain.pendingTransactions = this.mergePendingTransactions(
         bestChain.pendingTransactions || [],
@@ -223,10 +298,10 @@ export class SyncManager {
 
       // Save to database
       await this.blockchain.saveToDatabase();
-
+      
       console.log(`✅ Blockchain updated successfully! New length: ${this.blockchain.chain.length}`);
       console.log(`📝 Pending transactions: ${this.blockchain.pendingTransactions.length}`);
-
+      
       return { 
         updated: true, 
         oldLength: localLength, 
@@ -309,7 +384,7 @@ export class SyncManager {
 
     for (const peerUrl of this.blockchain.networkNodes) {
       const health = await this.checkPeerHealth(peerUrl, rp);
-
+      
       if (health.healthy) {
         healthyPeers.push(peerUrl);
       } else {

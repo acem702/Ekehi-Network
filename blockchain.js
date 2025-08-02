@@ -33,7 +33,7 @@ class Blockchain {
       // Add your actual Replit URLs here when you have multiple instances
       // Example: 'https://blockchain-node-2.your-username.repl.co',
       // Example: 'https://blockchain-node-3.your-username.repl.co'
-      'https://96b1a29f-366b-473e-814e-fa9afb7a900d-00-uazzfrfplfy.riker.replit.dev/'
+      'https://96b1a29f-366b-473e-814e-fa9afb7a900d-00-uazzfrfplfy.riker.replit.dev'
     ];
     
     // Peer health monitoring
@@ -83,8 +83,18 @@ class Blockchain {
       // Try to load existing data
       await this.loadFromDatabase();
       console.log(`${this.networkName} loaded with ${this.chain.length} blocks`);
+      
+      // Verify we have a valid genesis block
+      if (this.chain.length === 0 || !this.isValidGenesisBlock(this.chain[0])) {
+        console.log('Invalid or missing genesis block, creating new one...');
+        this.chain = []; // Clear any invalid blocks
+        this.createGenesisBlock();
+        await this.saveToDatabase();
+        console.log('New genesis block created and saved');
+      }
     } catch (error) {
       console.log(`Creating new ${this.networkName}...`);
+      this.chain = []; // Ensure clean slate
       this.createGenesisBlock();
       
       // Save after ensuring DB is open
@@ -312,8 +322,14 @@ class Blockchain {
   }
 
   createGenesisBlock() {
+    // Only create if we don't already have a genesis block
+    if (this.chain.length > 0) {
+      console.log('Genesis block already exists, skipping creation');
+      return;
+    }
+    
     const genesisBlock = {
-      index: 1,
+      index: 1, // Always use index 1 for consistency
       timestamp: Date.now(),
       transactions: [],
       nonce: 100,
@@ -324,6 +340,7 @@ class Blockchain {
       network: this.networkName
     };
     this.chain.push(genesisBlock);
+    console.log('Genesis block created with index 1');
   }
 
   async createNewBlock(nonce, previousBlockHash, hash) {
@@ -494,11 +511,13 @@ class Blockchain {
   }
 
   isValidGenesisBlock(block) {
-    return block.nonce === 100 &&
+    return block &&
+           block.nonce === 100 &&
            block.previousBlockHash === '0' &&
            block.hash === '0' &&
+           Array.isArray(block.transactions) &&
            block.transactions.length === 0 &&
-           block.index === 1;
+           (block.index === 1 || block.index === 0); // Allow either index 0 or 1
   }
 
   isValidBlockStructure(block) {
@@ -1214,6 +1233,21 @@ class Blockchain {
 
   // Clean up peers that are no longer responding
   async cleanupUnhealthyPeers(rp) {
+    // First remove any localhost URLs that shouldn't be there
+    const initialLength = this.networkNodes.length;
+    this.networkNodes = this.networkNodes.filter(nodeUrl => {
+      const isLocalhost = nodeUrl.includes('localhost') || nodeUrl.includes('127.0.0.1');
+      if (isLocalhost) {
+        console.log(`🗑️ Removing localhost peer: ${nodeUrl}`);
+      }
+      return !isLocalhost;
+    });
+    
+    if (this.networkNodes.length !== initialLength) {
+      console.log(`🧹 Removed ${initialLength - this.networkNodes.length} localhost peers`);
+      await this.saveToDatabase();
+    }
+    
     await this.syncManager.cleanupUnhealthyPeers();
   }
 
