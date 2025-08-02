@@ -33,7 +33,7 @@ class Blockchain {
       // Add your actual Replit URLs here when you have multiple instances
       // Example: 'https://blockchain-node-2.your-username.repl.co',
       // Example: 'https://blockchain-node-3.your-username.repl.co'
-      'https://ekehi-network.onrender.com'
+      'https://96b1a29f-366b-473e-814e-fa9afb7a900d-00-uazzfrfplfy.riker.replit.dev'
     ];
 
     // Peer health monitoring
