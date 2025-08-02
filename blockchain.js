@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Level } from 'level';
 import crypto from 'crypto';
 import { ContractSystem } from './contracts.js';
+import { SyncManager } from './sync-manager.js';
 
 
 const currentNodeUrl = process.argv[3];
@@ -11,7 +12,6 @@ class Blockchain {
   constructor() {
     this.chain = [];
     this.pendingTransactions = [];
-    this.currentNodeUrl = currentNodeUrl;
     this.networkNodes = [];
     this.difficulty = 4;
     this.miningReward = 12.5;
@@ -28,12 +28,27 @@ class Blockchain {
     this.isMining = false;
     this.minerAddress = this.generateWalletAddress();
 
-    // Peer discovery configuration - update these with your actual node URLs
+    // Enhanced peer discovery configuration
     this.discoverySeeds = [
       // Add your actual Replit URLs here when you have multiple instances
       // Example: 'https://blockchain-node-2.your-username.repl.co',
       // Example: 'https://blockchain-node-3.your-username.repl.co'
+      'https://ekehi-network.onrender.com'
     ];
+    
+    // Peer health monitoring
+    this.peerHealthCache = new Map(); // url -> { lastSeen, blocks, healthy }
+    this.maxUnhealthyPeers = 10; // Remove unhealthy peers after this many
+    this.peerHealthCheckInterval = 30000; // Check peer health every 30 seconds
+    
+    // Fix currentNodeUrl to use proper Replit URL if available
+    if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
+      this.currentNodeUrl = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+    } else if (currentNodeUrl && !currentNodeUrl.includes('localhost')) {
+      this.currentNodeUrl = currentNodeUrl;
+    } else {
+      this.currentNodeUrl = `http://0.0.0.0:${process.argv[2] || 5000}`;
+    }
     this.maxPeers = 20;
     this.discoveryInterval = null;
     this.nodeStatus = 'active';
@@ -51,13 +66,18 @@ class Blockchain {
     // Initialize contract system
     this.contractSystem = new ContractSystem(this);
     
+    // Initialize sync manager
+    this.syncManager = new SyncManager(this);
+    
     this.initializeBlockchain();
   }
 
   async initializeBlockchain() {
     try {
-      // Initialize database first
-      await this.db.open();
+      // Ensure database is properly opened first
+      if (this.db.status !== 'open') {
+        await this.db.open();
+      }
       console.log('Database opened successfully');
       
       // Try to load existing data
@@ -69,7 +89,7 @@ class Blockchain {
       
       // Save after ensuring DB is open
       try {
-        if (!this.db.status || this.db.status === 'opening') {
+        if (this.db.status !== 'open') {
           await this.db.open();
         }
         await this.saveToDatabase();
@@ -255,21 +275,38 @@ class Blockchain {
 
   async saveToDatabase() {
     try {
+      // Check if database is available
+      if (!this.db || this.db.status === 'closed') {
+        console.log('Database not available, skipping save');
+        return;
+      }
+
       // Ensure database is ready
       if (this.db.status !== 'open') {
-        await this.db.open();
+        try {
+          await this.db.open();
+        } catch (openError) {
+          console.log('Could not open database, skipping save:', openError.message);
+          return;
+        }
       }
       
-      await this.db.put('blockchain', this.chain);
-      await this.db.put('pendingTransactions', this.pendingTransactions);
-      await this.db.put('networkNodes', this.networkNodes);
-      await this.db.put('config', {
-        difficulty: this.difficulty,
-        minerAddress: this.minerAddress,
-        lastSaved: Date.now()
-      });
+      // Save data with individual error handling
+      try {
+        await this.db.put('blockchain', this.chain);
+        await this.db.put('pendingTransactions', this.pendingTransactions);
+        await this.db.put('networkNodes', this.networkNodes);
+        await this.db.put('config', {
+          difficulty: this.difficulty,
+          minerAddress: this.minerAddress,
+          lastSaved: Date.now()
+        });
+        console.log('✅ Database saved successfully');
+      } catch (writeError) {
+        console.log('Database write failed, continuing without persistence:', writeError.message);
+      }
     } catch (error) {
-      console.error('Error saving to database:', error);
+      console.log('Database save error:', error.message);
       // Continue operation even if database save fails
     }
   }
@@ -500,25 +537,70 @@ class Blockchain {
   }
 
   async resolveConflicts(blockchains) {
-    let longestChain = null;
+    console.log(`🔄 Resolving conflicts with ${blockchains.length} blockchains...`);
+    
+    let bestChain = null;
     let maxLength = this.chain.length;
-    let newPendingTransactions = null;
+    let bestPendingTransactions = null;
+    let maxWork = this.calculateChainWork(this.chain);
+
+    console.log(`📊 Local chain: ${this.chain.length} blocks, work: ${maxWork}`);
 
     for (const blockchain of blockchains) {
-      if (blockchain.chain.length > maxLength && this.chainIsValid(blockchain.chain)) {
-        maxLength = blockchain.chain.length;
-        longestChain = blockchain.chain;
-        newPendingTransactions = blockchain.pendingTransactions;
+      if (!blockchain || !blockchain.chain || !Array.isArray(blockchain.chain)) {
+        console.log(`❌ Invalid blockchain structure`);
+        continue;
+      }
+
+      const chainLength = blockchain.chain.length;
+      const chainWork = this.calculateChainWork(blockchain.chain);
+      
+      console.log(`📊 Remote chain: ${chainLength} blocks, work: ${chainWork}`);
+
+      // Only consider longer chains with valid structure
+      if (chainLength > maxLength && this.chainIsValid(blockchain.chain)) {
+        console.log(`✅ Found better chain: ${chainLength} blocks vs ${maxLength}`);
+        maxLength = chainLength;
+        maxWork = chainWork;
+        bestChain = blockchain.chain;
+        bestPendingTransactions = blockchain.pendingTransactions;
+      } else {
+        console.log(`❌ Chain rejected: length=${chainLength}, valid=${this.chainIsValid(blockchain.chain)}`);
       }
     }
 
-    if (longestChain) {
-      this.chain = longestChain;
-      this.pendingTransactions = newPendingTransactions || [];
-      await this.saveToDatabase();
-      return true;
+    if (bestChain) {
+      console.log(`🔄 Replacing chain: ${this.chain.length} -> ${bestChain.length} blocks`);
+      
+      // Create backup
+      const oldChain = [...this.chain];
+      const oldPending = [...this.pendingTransactions];
+      
+      try {
+        this.chain = [...bestChain];
+        this.pendingTransactions = bestPendingTransactions || [];
+        await this.saveToDatabase();
+        
+        console.log(`✅ Chain replaced successfully!`);
+        return true;
+      } catch (error) {
+        console.error(`❌ Failed to replace chain:`, error);
+        // Restore backup
+        this.chain = oldChain;
+        this.pendingTransactions = oldPending;
+        return false;
+      }
     }
+    
+    console.log(`✅ Local chain is already the best`);
     return false;
+  }
+
+  calculateChainWork(chain) {
+    return chain.reduce((total, block) => {
+      const difficulty = block.difficulty || 1;
+      return total + Math.pow(2, difficulty);
+    }, 0);
   }
 
   getBlock(blockhash) {
@@ -583,7 +665,10 @@ class Blockchain {
   async addNetworkNode(nodeUrl) {
     if (this.networkNodes.indexOf(nodeUrl) === -1 && nodeUrl !== this.currentNodeUrl) {
       this.networkNodes.push(nodeUrl);
-      await this.saveToDatabase();
+      // Non-blocking save
+      this.saveToDatabase().catch(err => {
+        console.log('Failed to save network node, continuing:', err.message);
+      });
     }
   }
 
@@ -827,26 +912,103 @@ class Blockchain {
     };
   }
 
-  // Peer discovery functionality
+  // Enhanced peer discovery functionality
   async startPeerDiscovery() {
-    console.log('Starting peer discovery...');
+    console.log('🚀 Starting enhanced peer discovery system...');
     
-    // Initial discovery
+    // Initial discovery (slightly delayed to allow server startup)
     setTimeout(async () => {
+      console.log('🔄 Running initial peer discovery...');
       await this.discoverPeers();
-    }, 5000); // Initial discovery after 5 seconds
+    }, 8000); // Initial discovery after 8 seconds
     
-    // Regular discovery
-    this.discoveryInterval = setInterval(async () => {
-      await this.discoverPeers();
-    }, 60000); // Discover peers every 60 seconds
+    // Regular discovery with exponential backoff on failures
+    let failureCount = 0;
+    const baseInterval = 45000; // Base 45 seconds
+    
+    const scheduleNextDiscovery = () => {
+      const delay = Math.min(baseInterval * Math.pow(1.5, failureCount), 300000); // Max 5 minutes
+      
+      this.discoveryInterval = setTimeout(async () => {
+        try {
+          console.log(`🔄 Running scheduled peer discovery (attempt ${failureCount + 1})...`);
+          const result = await this.discoverPeers();
+          
+          if (result.discovered > 0 || result.total > 0) {
+            failureCount = 0; // Reset on success
+            console.log(`✅ Discovery successful, resetting failure count`);
+          } else {
+            failureCount++;
+            console.log(`⚠️ No peers found, failure count: ${failureCount}`);
+          }
+        } catch (error) {
+          failureCount++;
+          console.error(`❌ Discovery failed (${failureCount}):`, error.message);
+        } finally {
+          scheduleNextDiscovery(); // Schedule next discovery
+        }
+      }, delay);
+      
+      console.log(`⏰ Next peer discovery in ${Math.round(delay/1000)} seconds`);
+    };
+    
+    scheduleNextDiscovery();
+    
+    // Start peer health monitoring
+    this.startPeerHealthMonitoring();
+  }
+
+  // Start monitoring peer health
+  startPeerHealthMonitoring() {
+    console.log('💓 Starting peer health monitoring...');
+    
+    this.healthMonitorInterval = setInterval(async () => {
+      if (this.networkNodes.length === 0) return;
+      
+      try {
+        let rp;
+        try {
+          rp = (await import('request-promise')).default;
+        } catch (importError) {
+          return;
+        }
+
+        await this.cleanupUnhealthyPeers(rp);
+        
+        // Update peer health cache
+        for (const peerUrl of this.networkNodes) {
+          if (await this.quickHealthCheck(peerUrl, rp)) {
+            this.peerHealthCache.set(peerUrl, {
+              lastSeen: Date.now(),
+              healthy: true
+            });
+          } else {
+            const current = this.peerHealthCache.get(peerUrl) || {};
+            this.peerHealthCache.set(peerUrl, {
+              ...current,
+              healthy: false
+            });
+          }
+        }
+        
+        console.log(`💓 Health check complete: ${this.networkNodes.length} peers monitored`);
+      } catch (error) {
+        console.error('❌ Peer health monitoring error:', error.message);
+      }
+    }, this.peerHealthCheckInterval);
   }
 
   stopPeerDiscovery() {
     if (this.discoveryInterval) {
-      clearInterval(this.discoveryInterval);
+      clearTimeout(this.discoveryInterval);
       this.discoveryInterval = null;
-      console.log('Peer discovery stopped');
+      console.log('🛑 Peer discovery stopped');
+    }
+    
+    if (this.healthMonitorInterval) {
+      clearInterval(this.healthMonitorInterval);
+      this.healthMonitorInterval = null;
+      console.log('🛑 Peer health monitoring stopped');
     }
   }
 
@@ -877,13 +1039,15 @@ class Blockchain {
 
   async discoverPeers() {
     try {
-      console.log(`🔍 Starting peer discovery from ${this.discoverySeeds.length} seed nodes...`);
+      console.log(`🔍 Starting enhanced peer discovery from ${this.discoverySeeds.length} seed nodes...`);
       console.log(`📍 Current node URL: ${this.currentNodeUrl}`);
       console.log(`📋 Discovery seeds:`, this.discoverySeeds);
       
       let discovered = 0;
+      const healthySeeds = [];
+      const failedSeeds = [];
 
-      // Import request-promise at the top level
+      // Import request-promise
       let rp;
       try {
         rp = (await import('request-promise')).default;
@@ -892,163 +1056,174 @@ class Blockchain {
         return { discovered: 0, total: this.networkNodes.length };
       }
 
-      // Try to connect to discovery seeds
+      // Phase 1: Health check all discovery seeds
+      console.log(`🏥 Phase 1: Health checking ${this.discoverySeeds.length} seeds...`);
+      
       for (const seedUrl of this.discoverySeeds) {
         if (seedUrl === this.currentNodeUrl) {
           console.log(`⏭️ Skipping self: ${seedUrl}`);
           continue;
         }
         
-        console.log(`🔗 Attempting to connect to seed: ${seedUrl}`);
-        
         try {
-          // First, try to register with the seed node
-          const registerOptions = {
-            uri: seedUrl + "/register-and-broadcast-node",
+          const healthCheck = await rp({
+            uri: seedUrl + "/stats",
+            method: "GET",
+            json: true,
+            timeout: 8000,
+            resolveWithFullResponse: false
+          });
+
+          if (healthCheck && healthCheck.totalBlocks >= 0) {
+            healthySeeds.push({
+              url: seedUrl,
+              blocks: healthCheck.totalBlocks,
+              peers: healthCheck.networkNodes || 0,
+              uptime: Date.now()
+            });
+            console.log(`✅ Seed healthy: ${seedUrl} (${healthCheck.totalBlocks} blocks, ${healthCheck.networkNodes} peers)`);
+          }
+        } catch (error) {
+          failedSeeds.push({ url: seedUrl, error: error.message });
+          console.log(`❌ Seed unhealthy: ${seedUrl} - ${error.message}`);
+        }
+      }
+
+      console.log(`📊 Health check complete: ${healthySeeds.length} healthy, ${failedSeeds.length} failed`);
+
+      // Phase 2: Connect to healthy seeds in order of block count (highest first)
+      healthySeeds.sort((a, b) => b.blocks - a.blocks);
+      
+      console.log(`🔗 Phase 2: Connecting to ${healthySeeds.length} healthy seeds...`);
+      
+      for (const seed of healthySeeds) {
+        try {
+          // Register with seed
+          const registerResponse = await rp({
+            uri: seed.url + "/register-and-broadcast-node",
             method: "POST",
             body: { newNodeUrl: this.currentNodeUrl },
             json: true,
-            timeout: 15000,
-            resolveWithFullResponse: false
-          };
+            timeout: 12000
+          });
 
-          console.log(`📤 Registering with ${seedUrl}...`);
-          const registerResponse = await rp(registerOptions);
-          console.log(`✅ Registration response:`, registerResponse);
+          console.log(`📤 Registered with ${seed.url}:`, registerResponse.note);
           
-          // Add to network nodes if not already present
-          if (this.networkNodes.indexOf(seedUrl) === -1) {
-            this.networkNodes.push(seedUrl);
+          // Add to network if not present
+          if (this.networkNodes.indexOf(seed.url) === -1) {
+            this.networkNodes.push(seed.url);
             discovered++;
-            console.log(`✅ Added seed to network: ${seedUrl}`);
+            console.log(`✅ Added seed to network: ${seed.url}`);
           }
 
-          // Try to get the peer list from the seed
+          // Get peer list from seed
           try {
-            const peersOptions = {
-              uri: seedUrl + "/api/network/peers",
+            const peersResponse = await rp({
+              uri: seed.url + "/api/network/peers",
               method: "GET",
               json: true,
-              timeout: 10000
-            };
-
-            console.log(`📋 Fetching peers from ${seedUrl}...`);
-            const peersResponse = await rp(peersOptions);
+              timeout: 8000
+            });
             
-            if (peersResponse && peersResponse.peers && Array.isArray(peersResponse.peers)) {
-              console.log(`📊 Found ${peersResponse.peers.length} peers from ${seedUrl}`);
+            if (peersResponse && peersResponse.peers) {
+              console.log(`📋 Fetched ${peersResponse.peers.length} peers from ${seed.url}`);
               
               for (const peer of peersResponse.peers) {
                 const peerUrl = peer.url || peer;
-                if (peerUrl && peerUrl !== this.currentNodeUrl && this.networkNodes.indexOf(peerUrl) === -1) {
-                  this.networkNodes.push(peerUrl);
-                  discovered++;
-                  console.log(`📡 Discovered new peer: ${peerUrl}`);
+                if (this.isValidPeerUrl(peerUrl) && this.networkNodes.indexOf(peerUrl) === -1) {
+                  // Quick health check for new peers
+                  if (await this.quickHealthCheck(peerUrl, rp)) {
+                    this.networkNodes.push(peerUrl);
+                    discovered++;
+                    console.log(`📡 Added healthy peer: ${peerUrl}`);
+                  }
                 }
               }
             }
           } catch (peersError) {
-            console.log(`⚠️ Could not fetch peers from ${seedUrl}:`, peersError.message);
+            console.log(`⚠️ Could not fetch peers from ${seed.url}:`, peersError.message);
           }
 
         } catch (seedError) {
-          console.log(`❌ Failed to connect to seed ${seedUrl}:`, seedError.message);
+          console.log(`❌ Failed to connect to seed ${seed.url}:`, seedError.message);
         }
       }
 
-      // Save updated network nodes
-      await this.saveToDatabase();
-      
-      // Sync blockchain with discovered peers
+      // Phase 3: Clean up unhealthy peers
+      await this.cleanupUnhealthyPeers(rp);
+
+      // Phase 4: Enhanced sync with best peers
       if (this.networkNodes.length > 0) {
-        console.log(`🔄 Syncing with ${this.networkNodes.length} peers...`);
-        await this.syncWithPeers();
+        console.log(`🔄 Phase 4: Enhanced sync with ${this.networkNodes.length} peers...`);
+        const syncResult = await this.syncManager.performFullSync();
+        if (syncResult.success && syncResult.updated) {
+          console.log(`✅ Blockchain updated during discovery: ${syncResult.peerBlocks} blocks from ${syncResult.bestPeer}`);
+        }
       }
 
+      // Save updated network state (non-blocking)
+      this.saveToDatabase().catch(err => {
+        console.log('Peer discovery save failed, continuing:', err.message);
+      });
+      
       // Update metrics
       this.nodeMetrics.peersConnected = this.networkNodes.length;
+      this.nodeMetrics.lastPeerDiscovery = Date.now();
       
-      console.log(`🎉 Peer discovery completed: ${discovered} new, ${this.networkNodes.length} total`);
-      console.log(`📋 Current network nodes:`, this.networkNodes);
+      console.log(`🎉 Enhanced peer discovery completed:`);
+      console.log(`   📡 ${discovered} new peers discovered`);
+      console.log(`   🌐 ${this.networkNodes.length} total peers`);
+      console.log(`   ✅ ${healthySeeds.length} healthy seeds`);
+      console.log(`   ❌ ${failedSeeds.length} failed seeds`);
       
       return {
         discovered,
         total: this.networkNodes.length,
-        peers: this.networkNodes
+        peers: this.networkNodes,
+        healthySeeds: healthySeeds.length,
+        failedSeeds: failedSeeds.length
       };
     } catch (error) {
-      console.error('💥 Peer discovery error:', error);
+      console.error('💥 Enhanced peer discovery error:', error);
       return { discovered: 0, total: this.networkNodes.length, peers: this.networkNodes };
     }
   }
 
-  async syncWithPeers() {
-    if (this.networkNodes.length === 0) {
-      console.log(`⚠️ No peers to sync with`);
-      return { synced: 0, updated: false };
-    }
+  // Validate peer URL format
+  isValidPeerUrl(url) {
+    if (!url || typeof url !== 'string') return false;
+    if (url === this.currentNodeUrl) return false;
+    if (url.includes('localhost') || url.includes('127.0.0.1')) return false;
+    return url.startsWith('http://') || url.startsWith('https://');
+  }
 
-    console.log(`🔄 Syncing blockchain with ${this.networkNodes.length} peers...`);
-    const blockchains = [];
-    const failedNodes = [];
-
-    // Import request-promise
-    let rp;
+  // Quick health check for new peers
+  async quickHealthCheck(peerUrl, rp) {
     try {
-      rp = (await import('request-promise')).default;
-    } catch (importError) {
-      console.error('❌ Failed to import request-promise for sync:', importError.message);
-      return { synced: 0, updated: false };
+      const health = await rp({
+        uri: peerUrl + "/stats",
+        method: "GET",
+        json: true,
+        timeout: 5000
+      });
+      return health && typeof health.totalBlocks === 'number';
+    } catch (error) {
+      return false;
     }
+  }
 
-    for (const nodeUrl of this.networkNodes) {
-      try {
-        console.log(`📡 Fetching blockchain from ${nodeUrl}...`);
-        
-        const response = await rp({
-          uri: nodeUrl + "/blockchain",
-          method: "GET",
-          json: true,
-          timeout: 12000,
-          resolveWithFullResponse: false
-        });
+  // Clean up peers that are no longer responding
+  async cleanupUnhealthyPeers(rp) {
+    await this.syncManager.cleanupUnhealthyPeers();
+  }
 
-        if (response && response.chain && Array.isArray(response.chain)) {
-          blockchains.push(response);
-          console.log(`📊 Fetched chain from ${nodeUrl}: ${response.chain.length} blocks (local: ${this.chain.length})`);
-        } else {
-          console.log(`⚠️ Invalid blockchain response from ${nodeUrl}`);
-        }
-      } catch (error) {
-        console.log(`❌ Failed to sync with ${nodeUrl}: ${error.message}`);
-        failedNodes.push(nodeUrl);
-      }
-    }
+  // New enhanced sync using SyncManager
+  async intelligentSync(rp) {
+    return await this.syncManager.performFullSync();
+  }
 
-    // Remove failed nodes
-    for (const failedNode of failedNodes) {
-      const index = this.networkNodes.indexOf(failedNode);
-      if (index > -1) {
-        this.networkNodes.splice(index, 1);
-        console.log(`🗑️ Removed unresponsive node: ${failedNode}`);
-      }
-    }
-
-    if (blockchains.length > 0) {
-      console.log(`🔍 Comparing ${blockchains.length} blockchain(s) for consensus...`);
-      
-      const chainReplaced = await this.resolveConflicts(blockchains);
-      if (chainReplaced) {
-        console.log(`✅ Blockchain updated from network sync! New length: ${this.chain.length}`);
-        return { synced: blockchains.length, updated: true };
-      } else {
-        console.log(`✅ Local blockchain is up to date (${this.chain.length} blocks)`);
-        return { synced: blockchains.length, updated: false };
-      }
-    } else {
-      console.log(`❌ No valid blockchains received from peers`);
-      return { synced: 0, updated: false };
-    }
+  async syncWithPeers() {
+    return await this.syncManager.performFullSync();
   }
 
   // Start all background processes

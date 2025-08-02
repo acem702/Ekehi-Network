@@ -354,44 +354,35 @@ app.post("/receive-new-block", (req, res) => {
 
 app.get("/consensus", async (req, res) => {
   try {
-    const requestPromises = [];
-    bitcoin.networkNodes.forEach((networkNodeUrl) => {
-      const requestOptions = {
-        uri: networkNodeUrl + "/blockchain",
-        method: "GET",
-        json: true,
-        timeout: 5000
-      };
-      requestPromises.push(
-        rp(requestOptions).catch(err => {
-          console.error(`Failed to fetch blockchain from ${networkNodeUrl}:`, err.message);
-          return null;
-        })
-      );
-    });
+    console.log('🔄 Manual consensus/sync triggered...');
+    const syncResult = await bitcoin.syncManager.performFullSync();
 
-    const responses = await Promise.all(requestPromises);
-    const blockchains = responses.filter(response => response !== null);
-
-    if (blockchains.length === 0) {
-      return res.json({
-        note: "No network nodes responded",
-        chain: bitcoin.chain,
-        stats: bitcoin.getStats()
-      });
-    }
-
-    const chainReplaced = await bitcoin.resolveConflicts(blockchains);
-
-    if (chainReplaced) {
-      res.json({
-        note: "Chain has been replaced with longer valid chain",
-        chain: bitcoin.chain,
-        stats: bitcoin.getStats()
-      });
+    if (syncResult.success) {
+      if (syncResult.updated) {
+        res.json({
+          note: `Chain has been updated from ${syncResult.oldLength || 'unknown'} to ${syncResult.newLength} blocks`,
+          updated: true,
+          oldLength: syncResult.oldLength,
+          newLength: syncResult.newLength,
+          bestPeer: syncResult.bestPeer,
+          chain: bitcoin.chain,
+          stats: bitcoin.getStats()
+        });
+      } else {
+        res.json({
+          note: "Current chain is already up to date",
+          updated: false,
+          localBlocks: syncResult.localBlocks,
+          peerBlocks: syncResult.peerBlocks,
+          chain: bitcoin.chain,
+          stats: bitcoin.getStats()
+        });
+      }
     } else {
       res.json({
-        note: "Current chain retained - no longer valid chain found",
+        note: `Consensus failed: ${syncResult.reason}`,
+        error: syncResult.error,
+        updated: false,
         chain: bitcoin.chain,
         stats: bitcoin.getStats()
       });
@@ -906,16 +897,26 @@ app.post("/api/node/restart", (req, res) => {
 });
 
 app.get("/api/network/peers", (req, res) => {
-  res.json({
-    peers: bitcoin.networkNodes.map(node => ({
+  const peersWithHealth = bitcoin.networkNodes.map(node => {
+    const healthInfo = bitcoin.peerHealthCache.get(node) || {};
+    return {
       url: node,
-      status: 'connected', // In real implementation, ping to check
-      lastSeen: Date.now()
-    })),
+      status: healthInfo.healthy !== false ? 'healthy' : 'unhealthy',
+      lastSeen: healthInfo.lastSeen || Date.now(),
+      blocks: healthInfo.blocks || 0
+    };
+  });
+
+  res.json({
+    peers: peersWithHealth,
     maxPeers: bitcoin.maxPeers,
     discoveryEnabled: bitcoin.discoveryInterval !== null,
+    healthMonitoringEnabled: bitcoin.healthMonitorInterval !== null,
     currentNodeUrl: bitcoin.currentNodeUrl,
-    discoverySeeds: bitcoin.discoverySeeds
+    discoverySeeds: bitcoin.discoverySeeds,
+    peerHealthCache: Object.fromEntries(bitcoin.peerHealthCache),
+    totalPeers: bitcoin.networkNodes.length,
+    healthyPeers: peersWithHealth.filter(p => p.status === 'healthy').length
   });
 });
 
@@ -1251,13 +1252,17 @@ app.get("/api/debug/peers", (req, res) => {
 
 app.post("/api/debug/force-sync", async (req, res) => {
   try {
-    console.log('🔧 Manual sync triggered...');
-    const result = await bitcoin.syncWithPeers();
+    console.log('🔧 Manual comprehensive sync triggered...');
+    const result = await bitcoin.syncManager.performFullSync();
     res.json({
-      success: true,
-      result,
+      success: result.success,
+      updated: result.updated,
+      reason: result.reason,
+      localBlocks: bitcoin.chain.length,
+      peerBlocks: result.peerBlocks,
+      bestPeer: result.bestPeer,
       networkNodes: bitcoin.networkNodes,
-      chainLength: bitcoin.chain.length
+      error: result.error
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1279,14 +1284,19 @@ app.post("/api/debug/force-discovery", async (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
+  // Determine the public URL
+  const publicUrl = process.env.REPL_SLUG && process.env.REPL_OWNER 
+    ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`
+    : `http://0.0.0.0:${port}`;
+    
   console.log('🚀 ===================================');
   console.log(`🌐 ${bitcoin.networkName} TESTNET LAUNCHED`);
   console.log('🚀 ===================================');
-  console.log(`📡 Server: http://0.0.0.0:${port}`);  
-  console.log(`📊 Dashboard: http://0.0.0.0:${port}/dashboard`);
-  console.log(`🔍 Explorer: http://0.0.0.0:${port}/block-explorer`);
-  console.log(`📖 API Docs: http://0.0.0.0:${port}/api/docs`);
-  console.log(`🔧 Debug: http://0.0.0.0:${port}/api/debug/peers`);
+  console.log(`📡 Server: ${publicUrl}`);  
+  console.log(`📊 Dashboard: ${publicUrl}/dashboard`);
+  console.log(`🔍 Explorer: ${publicUrl}/block-explorer`);
+  console.log(`📖 API Docs: ${publicUrl}/api/docs`);
+  console.log(`🔧 Debug: ${publicUrl}/api/debug/peers`);
   console.log('');
   console.log(`⛏️  Auto-mining: ${bitcoin.autoMining ? '✅ ACTIVE' : '❌ DISABLED'}`);
   console.log(`🔗 Peer discovery: ✅ ACTIVE`);
@@ -1295,6 +1305,9 @@ app.listen(port, '0.0.0.0', () => {
   console.log(`📦 Blocks: ${bitcoin.chain.length}`);
   console.log(`🏠 Miner: ${bitcoin.minerAddress}`);
   console.log(`🌐 Node URL: ${bitcoin.currentNodeUrl || 'Not set'}`);
+  console.log('');
+  console.log('🔒 To connect peers, add this URL to discoverySeeds:');
+  console.log(`    "${publicUrl}"`);
   console.log('');
   console.log('🎉 TESTNET READY FOR USERS!');
   console.log('=====================================');
